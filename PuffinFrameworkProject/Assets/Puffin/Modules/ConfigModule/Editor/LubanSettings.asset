@@ -16,9 +16,9 @@ MonoBehaviour:
   defineDir: Defines
   outputCodeDir: ../Assets/Puffin/Modules/ConfigModule/Runtime/Generate
   outputDataDir: ../Assets/Puffin/Modules/ConfigModule/Resources
-  codeTarget: 2
-  dataTarget: 1
-  topModule: PuffinFramework.Config.Gen
+  codeTarget: 0
+  dataTarget: 0
+  topModule: PuffinFrameworks.Config.Gen
   managerName: Tables
   enableAutoImport: 1
   timeZone: 

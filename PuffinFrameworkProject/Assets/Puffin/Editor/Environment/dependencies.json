@@ -1,0 +1,14 @@
+{
+    "dependencies": [
+        {
+            "id": "7z",
+            "displayName": "7-Zip",
+            "source": 2,
+            "type": 2,
+            "requirement": 0,
+            "url": "https://www.7-zip.org/a/7zr.exe",
+            "installDir": "Tools/7z",
+            "requiredFiles": ["7zr.exe"]
+        }
+    ]
+}

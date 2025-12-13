@@ -1,0 +1,77 @@
+{
+    "dependencies": [
+        {
+            "id": "LubanTool",
+            "displayName": "Luban 工具",
+            "version": "4.5.0",
+            "source": 3,
+            "type": 2,
+            "requirement": 0,
+            "url": "https://github.com/focus-creative-games/luban/releases/download/v4.5.0/Luban.7z",
+            "installDir": "Tools/Luban",
+            "requiredFiles": ["Luban/Luban.dll"]
+        },
+        {
+            "id": "LubanTemplate",
+            "displayName": "Luban 模板",
+            "source": 1,
+            "type": 0,
+            "requirement": 0,
+            "url": "focus-creative-games/luban_examples@main",
+            "extractPath": "MiniTemplate",
+            "installDir": "Luban",
+            "requiredFiles": ["Datas/__tables__.xlsx"]
+        },
+        {
+            "id": "SimpleJSON",
+            "displayName": "SimpleJSON",
+            "source": 1,
+            "type": 1,
+            "requirement": 1, 
+            "url": "Bunny83/SimpleJSON@master",
+            "extractPath": "",
+            "requiredFiles": ["SimpleJSON.cs"]
+        },
+        {
+            "id": "Newtonsoft.Json",
+            "displayName": "Newtonsoft.Json",
+            "source": 0,
+            "type": 0,
+            "requirement": 1,
+            "url": "Newtonsoft.Json",
+            "version": "13.0.3",
+            "targetFrameworks": ["netstandard2.0"],
+            "requiredFiles": ["Newtonsoft.Json.dll"]
+        },
+        {
+            "id": "LubanRuntime",
+            "displayName": "Luban 运行时",
+            "source": 1,
+            "type": 1,
+            "requirement": 0,
+            "url": "focus-creative-games/luban_examples@main",
+            "extractPath": "Projects/Csharp_DotNet_bin/LubanLib",
+            "requiredFiles": ["BeanBase.cs"]
+        },
+        {
+            "id": "System.Text.Json",
+            "displayName": "System.Text.Json",
+            "source": 0,
+            "type": 0,
+            "requirement": 1,
+            "url": "System.Text.Json",
+            "version": "8.0.5",
+            "targetFrameworks": ["netstandard2.0", "netstandard2.1"],
+            "requiredFiles": ["System.Text.Json.dll"],
+            "dependencies": [
+                {"id": "System.Text.Encodings.Web", "source": 0, "type": 0, "url": "System.Text.Encodings.Web", "version": "8.0.0"},
+                {"id": "Microsoft.Bcl.AsyncInterfaces", "source": 0, "type": 0, "url": "Microsoft.Bcl.AsyncInterfaces", "version": "8.0.0"},
+                {"id": "System.Runtime.CompilerServices.Unsafe", "source": 0, "type": 0, "url": "System.Runtime.CompilerServices.Unsafe", "version": "6.0.0"},
+                {"id": "System.Buffers", "source": 0, "type": 0, "url": "System.Buffers", "version": "4.5.1"},
+                {"id": "System.Memory", "source": 0, "type": 0, "url": "System.Memory", "version": "4.5.5"},
+                {"id": "System.Numerics.Vectors", "source": 0, "type": 0, "url": "System.Numerics.Vectors", "version": "4.5.0"},
+                {"id": "System.Threading.Tasks.Extensions", "source": 0, "type": 0, "url": "System.Threading.Tasks.Extensions", "version": "4.5.4"}
+            ]
+        }
+    ]
+}
