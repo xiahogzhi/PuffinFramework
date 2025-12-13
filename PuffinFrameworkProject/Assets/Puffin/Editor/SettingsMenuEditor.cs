@@ -12,7 +12,7 @@ namespace Puffin.Editor
         [MenuItem("Puffin Framework/Preference")]
         private static void SelectPreference()
         {
-            Puffinettings.SelectInEditor();
+            PuffinSettings.SelectInEditor();
         }
 
         [MenuItem("Puffin Framework/Settings/Log Settings")]

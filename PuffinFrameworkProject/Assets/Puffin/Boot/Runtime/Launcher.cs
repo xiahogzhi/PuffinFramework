@@ -30,7 +30,7 @@ namespace Puffin.Boot.Runtime
             {
                 launcher.Setup();
 
-                var settings = Puffinettings.Instance;
+                var settings = PuffinSettings.Instance;
                 if (settings != null && settings.autoInitialize)
                 {
                     launcher.StartAsync();
@@ -85,7 +85,7 @@ namespace Puffin.Boot.Runtime
             {
                 await UniTask.Yield();
 
-                var settings = Puffinettings.Instance;
+                var settings = PuffinSettings.Instance;
                 var scannerConfig = settings.ToScannerConfig();
                 var runtimeConfig = settings.ToRuntimeConfig();
 

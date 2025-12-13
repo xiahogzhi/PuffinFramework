@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9217164488564c148bd5236ea911dc74, type: 3}
+  m_Name: PuffinSetting
+  m_EditorClassIdentifier: PuffinFramework.Runtime::Puffin.Runtime.Settings.Puffinettings
+  scanMode: 0
+  requireAutoRegister: 1
+  assemblyNames: []
+  excludeAssemblyPrefixes:
+  - System
+  - Microsoft
+  - Unity
+  - mscorlib
+  - netstandard
+  - Mono
+  - nunit
+  enableProfiling: 0
+  symbols: []
+  autoInitialize: 1
+  enableEditorSupport: 1
+  systemInfoLevel: 1
+  editorLanguage: 0

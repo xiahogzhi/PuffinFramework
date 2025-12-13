@@ -20,6 +20,7 @@ namespace Puffin.Modules.ConfigModule.Runtime
 
         public async UniTask OnInitializeAsync()
         {
+            
             await LoadAsync();
         }
 

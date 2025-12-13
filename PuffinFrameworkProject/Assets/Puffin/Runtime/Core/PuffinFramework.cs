@@ -124,8 +124,8 @@ namespace Puffin.Runtime.Core
 
             ResourcesLoader = setupContext.ResourcesLoader ?? new DefaultResourceLoader();
             Logger = setupContext.Logger ?? new DefaultLogger();
-            ScannerConfig = setupContext.ScannerConfig ?? Puffinettings.Instance.ToScannerConfig();
-            RuntimeConfig = setupContext.runtimeConfig ?? Puffinettings.Instance.ToRuntimeConfig();
+            ScannerConfig = setupContext.ScannerConfig ?? PuffinSettings.Instance.ToScannerConfig();
+            RuntimeConfig = setupContext.runtimeConfig ?? PuffinSettings.Instance.ToRuntimeConfig();
             IsSetup = true;
             if (_editorRuntime == null)
                 Logger.Info("Puffin Framework Setup!");
@@ -234,7 +234,7 @@ namespace Puffin.Runtime.Core
 
         private static void LogSystemInfo()
         {
-            var settings = Puffinettings.Instance;
+            var settings = PuffinSettings.Instance;
             var level = settings?.systemInfoLevel ?? SystemInfoLevel.Simple;
 
             if (level == SystemInfoLevel.None)

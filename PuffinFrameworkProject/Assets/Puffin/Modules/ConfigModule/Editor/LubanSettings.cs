@@ -33,18 +33,10 @@ namespace Puffin.Modules.ConfigModule.Editor
         public DataTarget dataTarget = DataTarget.Json;
 
         [Tooltip("顶层命名空间")]
-        public string topModule = "cfg";
+        public string topModule = "PuffinFramework.Config.Gen";
 
         [Tooltip("Tables 管理类名")]
         public string managerName = "Tables";
-
-        [Header("分组配置")]
-        [Tooltip("默认分组名")]
-        public string defaultGroup = "c";
-
-        [Header("数据源配置")]
-        [Tooltip("数据源类型")]
-        public InputDataType inputDataType = InputDataType.Excel;
 
         [Header("自动导入配置")]
         [Tooltip("启用自动导入 table（文件名以 # 开头的 excel 自动识别为表）")]
@@ -140,7 +132,7 @@ namespace Puffin.Modules.ConfigModule.Editor
             return JsonUtility.ToJson(conf, true);
         }
 
-        public static bool NeedsRuntime(CodeTarget target) => target == CodeTarget.CsBin;
+        public static bool NeedsRuntime(CodeTarget target) => target is CodeTarget.CsBin or CodeTarget.CsSimpleJson or CodeTarget.CsNewtonsoft or CodeTarget.CsDotnetJson;
 
         public static string GetCodeTargetString(CodeTarget target) => target switch
         {
@@ -209,15 +201,6 @@ namespace Puffin.Modules.ConfigModule.Editor
         [InspectorName("Protobuf 2 Binary")] Protobuf2Bin,
         [InspectorName("Protobuf 3 Binary")] Protobuf3Bin,
         [InspectorName("FlatBuffers Binary")] FlatbuffersBin
-    }
-
-    public enum InputDataType
-    {
-        [InspectorName("Excel (.xlsx)")] Excel,
-        [InspectorName("JSON")] Json,
-        [InspectorName("Lua")] Lua,
-        [InspectorName("XML")] Xml,
-        [InspectorName("YAML")] Yaml
     }
 
     // luban.conf JSON 结构

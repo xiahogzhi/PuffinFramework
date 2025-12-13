@@ -29,7 +29,7 @@ namespace Puffin.Editor.Localization
             {
                 if (_currentLanguage == null)
                 {
-                    var settings = Puffinettings.Instance;
+                    var settings = PuffinSettings.Instance;
                     _currentLanguage = settings != null ? GetLanguageCode(settings.editorLanguage) : "zh";
                 }
                 return _currentLanguage;

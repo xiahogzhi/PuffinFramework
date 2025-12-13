@@ -2,6 +2,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using System.Net;
 using System.Net.Http;
 using System.Threading.Tasks;
@@ -24,6 +25,8 @@ namespace Puffin.Modules.ConfigModule.Editor
         private bool _is7zInstalled;
         private bool _hasTemplate;
         private bool _isProcessing;
+        private bool _installingRuntime;
+        private bool _useProxy = true;
         private string _status = "";
         private float _downloadProgress;
         private long _downloadedBytes;
@@ -42,6 +45,7 @@ namespace Puffin.Modules.ConfigModule.Editor
             public string lubanVersion = "4.5.0";
             public string lubanDownloadUrl = "https://github.com/focus-creative-games/luban/releases/download/v{0}/Luban.7z";
             public string templateRepoUrl = "https://gitee.com/focus-creative-games/luban_examples.git";
+            public string templateZipUrl = "https://github.com/focus-creative-games/luban_examples/archive/refs/heads/main.zip";
             public string sevenZipDownloadUrl = "https://www.7-zip.org/a/7zr.exe";
         }
 
@@ -82,7 +86,7 @@ namespace Puffin.Modules.ConfigModule.Editor
 
         private void OnGUI()
         {
-            var allReady = _is7zInstalled && _isInstalled && _hasTemplate;
+            var allReady = _is7zInstalled && _isInstalled && _hasTemplate && !_installingRuntime;
 
             // 顶部工具栏（仅在全部就绪时显示）
             if (allReady)
@@ -148,9 +152,17 @@ namespace Puffin.Modules.ConfigModule.Editor
             // 状态显示
             EditorGUILayout.BeginHorizontal();
             GUILayout.FlexibleSpace();
-            DrawStatusLabel("7-Zip", _is7zInstalled);
-            DrawStatusLabel("Luban", _isInstalled);
-            DrawStatusLabel("模板", _hasTemplate);
+            if (_installingRuntime)
+            {
+                var (_, runtimeName, _) = GetRuntimeInfo(LubanSettings.Instance.codeTarget);
+                DrawStatusLabel(runtimeName, false);
+            }
+            else
+            {
+                DrawStatusLabel("7-Zip", _is7zInstalled);
+                DrawStatusLabel("Luban", _isInstalled);
+                DrawStatusLabel("模板", _hasTemplate);
+            }
             GUILayout.FlexibleSpace();
             EditorGUILayout.EndHorizontal();
 
@@ -162,7 +174,13 @@ namespace Puffin.Modules.ConfigModule.Editor
             EditorGUILayout.BeginHorizontal();
             GUILayout.FlexibleSpace();
 
-            if (!_is7zInstalled)
+            if (_installingRuntime)
+            {
+                var (_, runtimeName, _) = GetRuntimeInfo(LubanSettings.Instance.codeTarget);
+                if (GUILayout.Button($"安装 {runtimeName}", GUILayout.Width(200), GUILayout.Height(40)))
+                    InstallRuntime(LubanSettings.Instance.codeTarget);
+            }
+            else if (!_is7zInstalled)
             {
                 if (GUILayout.Button("安装 7-Zip", GUILayout.Width(200), GUILayout.Height(40)))
                     _ = Install7zAsync();
@@ -181,7 +199,27 @@ namespace Puffin.Modules.ConfigModule.Editor
             GUILayout.FlexibleSpace();
             EditorGUILayout.EndHorizontal();
 
+            // 取消按钮（仅运行时安装时显示）
+            if (_installingRuntime && !_isProcessing)
+            {
+                EditorGUILayout.Space(10);
+                EditorGUILayout.BeginHorizontal();
+                GUILayout.FlexibleSpace();
+                if (GUILayout.Button("取消", GUILayout.Width(100), GUILayout.Height(30)))
+                    _installingRuntime = false;
+                GUILayout.FlexibleSpace();
+                EditorGUILayout.EndHorizontal();
+            }
+
             EditorGUI.EndDisabledGroup();
+
+            // 代理选项
+            EditorGUILayout.Space(10);
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.FlexibleSpace();
+            _useProxy = EditorGUILayout.ToggleLeft("使用系统代理", _useProxy, GUILayout.Width(120));
+            GUILayout.FlexibleSpace();
+            EditorGUILayout.EndHorizontal();
 
             GUILayout.FlexibleSpace();
         }
@@ -216,11 +254,15 @@ namespace Puffin.Modules.ConfigModule.Editor
             {
                 EditorGUI.indentLevel++;
                 EditorGUILayout.PropertyField(_settingsSO.FindProperty("codeTarget"), new GUIContent("代码目标"));
+
+                // 非 C# 代码类型警告
+                var ct = LubanSettings.Instance.codeTarget;
+                if (ct is not (CodeTarget.CsBin or CodeTarget.CsSimpleJson or CodeTarget.CsDotnetJson or CodeTarget.CsNewtonsoft))
+                    EditorGUILayout.HelpBox("当前代码目标不是 C#，Unity 项目可能无法使用生成的代码", MessageType.Warning);
+
                 EditorGUILayout.PropertyField(_settingsSO.FindProperty("dataTarget"), new GUIContent("数据格式"));
                 EditorGUILayout.PropertyField(_settingsSO.FindProperty("topModule"), new GUIContent("命名空间"));
                 EditorGUILayout.PropertyField(_settingsSO.FindProperty("managerName"), new GUIContent("管理类名"));
-                EditorGUILayout.PropertyField(_settingsSO.FindProperty("defaultGroup"), new GUIContent("默认分组"));
-                EditorGUILayout.PropertyField(_settingsSO.FindProperty("inputDataType"), new GUIContent("数据源类型"));
                 EditorGUI.indentLevel--;
             }
 
@@ -228,16 +270,14 @@ namespace Puffin.Modules.ConfigModule.Editor
             EditorGUILayout.PropertyField(_settingsSO.FindProperty("enableAutoImport"), new GUIContent("启用自动导入 Table", "文件名以 # 开头的 excel 自动识别为表"));
 
             // 检测是否需要运行时
-            if (LubanSettings.NeedsRuntime(LubanSettings.Instance.codeTarget))
+            var codeTarget = LubanSettings.Instance.codeTarget;
+            if (LubanSettings.NeedsRuntime(codeTarget) && !CheckRuntimeInstalled(codeTarget))
             {
-                var runtimeDir = Path.Combine(Application.dataPath, "Puffin/Modules/ConfigModule/Runtime/Luban");
-                if (!Directory.Exists(runtimeDir) || Directory.GetFiles(runtimeDir, "*.cs").Length == 0)
-                {
-                    EditorGUILayout.Space(5);
-                    EditorGUILayout.HelpBox("cs-bin 格式需要 Luban 运行时库", MessageType.Warning);
-                    if (GUILayout.Button("安装 Luban 运行时"))
-                        InstallLubanRuntime();
-                }
+                var (_, runtimeName, hint) = GetRuntimeInfo(codeTarget);
+                EditorGUILayout.Space(5);
+                EditorGUILayout.HelpBox(hint, MessageType.Warning);
+                if (GUILayout.Button($"安装 {runtimeName}"))
+                    _installingRuntime = true;
             }
 
             EditorGUILayout.Space(5);
@@ -263,10 +303,13 @@ namespace Puffin.Modules.ConfigModule.Editor
                 EditorGUILayout.HelpBox(_status, MessageType.Info);
             }
 
-            if (_isProcessing && _totalBytes > 0)
+            if (_isProcessing && _downloadedBytes > 0)
             {
                 var rect = EditorGUILayout.GetControlRect(false, 20);
-                EditorGUI.ProgressBar(rect, _downloadProgress, $"{_downloadedBytes / 1024f:F0} KB / {_totalBytes / 1024f:F0} KB ({_downloadProgress * 100:F0}%)");
+                if (_totalBytes > 0)
+                    EditorGUI.ProgressBar(rect, _downloadProgress, $"{_downloadedBytes / 1024f:F0} KB / {_totalBytes / 1024f:F0} KB ({_downloadProgress * 100:F0}%)");
+                else
+                    EditorGUI.ProgressBar(rect, 0, $"{_downloadedBytes / 1024f:F0} KB 已下载...");
             }
         }
 
@@ -282,45 +325,385 @@ namespace Puffin.Modules.ConfigModule.Editor
 
         private static string GetLubanConfigDir() => Path.Combine(ProjectRoot, "Luban");
         private static string LubanRuntimeDir => Path.Combine(Application.dataPath, "Puffin/Modules/ConfigModule/Runtime/Luban");
+        private static string SimpleJsonDir => Path.Combine(Application.dataPath, "Puffin/Modules/ConfigModule/Runtime/SimpleJSON");
+        private static string NewtonsoftDir => Path.Combine(Application.dataPath, "Puffin/Modules/ConfigModule/Runtime/Newtonsoft.Json");
+        private static string SystemTextJsonDir => Path.Combine(Application.dataPath, "Puffin/Modules/ConfigModule/Runtime/System.Text.Json");
 
-        private void InstallLubanRuntime()
+        private static (string dir, string name, string hint) GetRuntimeInfo(CodeTarget target) => target switch
+        {
+            CodeTarget.CsBin => (LubanRuntimeDir, "Luban 运行时", "cs-bin 格式需要 Luban 运行时库"),
+            CodeTarget.CsSimpleJson => (SimpleJsonDir, "SimpleJSON", "cs-simple-json 格式需要 SimpleJSON 库"),
+            CodeTarget.CsNewtonsoft => (NewtonsoftDir, "Newtonsoft.Json", "cs-newtonsoft-json 格式需要 Newtonsoft.Json 库"),
+            CodeTarget.CsDotnetJson => (SystemTextJsonDir, "System.Text.Json", "cs-dotnet-json 格式需要 Luban 运行时和 System.Text.Json 库"),
+            _ => ("", "", "")
+        };
+
+        private static bool HasRuntimeFiles(string dir)
+        {
+            return Directory.GetFiles(dir, "*.cs", SearchOption.AllDirectories).Length > 0 ||
+                   Directory.GetFiles(dir, "*.dll", SearchOption.AllDirectories).Length > 0;
+        }
+
+        private bool CheckRuntimeInstalled(CodeTarget target)
+        {
+            var (runtimeDir, _, _) = GetRuntimeInfo(target);
+            if (!Directory.Exists(runtimeDir) || !HasRuntimeFiles(runtimeDir))
+                return false;
+            // CsDotnetJson 还需要 Luban 运行时
+            if (target == CodeTarget.CsDotnetJson)
+                return Directory.Exists(LubanRuntimeDir) && HasRuntimeFiles(LubanRuntimeDir);
+            return true;
+        }
+
+        private void InstallRuntime(CodeTarget target)
+        {
+            var (destDir, name, _) = GetRuntimeInfo(target);
+            switch (target)
+            {
+                case CodeTarget.CsSimpleJson:
+                    _ = InstallSimpleJsonAsync(destDir, name);
+                    return;
+                case CodeTarget.CsNewtonsoft:
+                    _ = InstallNewtonsoftAsync(destDir, name);
+                    return;
+                case CodeTarget.CsDotnetJson:
+                    _ = InstallSystemTextJsonWithLubanAsync();
+                    return;
+            }
+            var srcPath = target switch
+            {
+                CodeTarget.CsBin => "Projects/Csharp_DotNet_bin/LubanLib",
+                _ => ""
+            };
+            if (string.IsNullOrEmpty(srcPath)) return;
+            _ = InstallRuntimeAsync(destDir, srcPath, name);
+        }
+
+        private async Task InstallSimpleJsonAsync(string destDir, string name)
         {
             _isProcessing = true;
-            _status = "正在安装 Luban 运行时...";
+            _status = $"正在下载 {name}...";
+            _downloadProgress = 0;
+            _downloadedBytes = 0;
+            _totalBytes = 0;
             Repaint();
+
+            var tempZip = Path.Combine(Path.GetTempPath(), "simplejson_" + Guid.NewGuid() + ".zip");
+            var tempDir = Path.Combine(Path.GetTempPath(), "simplejson_" + Guid.NewGuid());
 
             try
             {
-                var tempDir = Path.Combine(Path.GetTempPath(), "luban_examples_" + Guid.NewGuid());
-                if (!RunCommand("git", $"clone --depth 1 {_editorSettings.templateRepoUrl} \"{tempDir}\"", out var output))
+                await DownloadFileAsync("https://github.com/Bunny83/SimpleJSON/archive/refs/heads/master.zip", tempZip);
+
+                _status = "正在解压...";
+                _totalBytes = 0;
+                Repaint();
+
+                ZipFile.ExtractToDirectory(tempZip, tempDir);
+
+                var srcDir = Path.Combine(tempDir, "SimpleJSON-master");
+                if (Directory.Exists(srcDir))
                 {
-                    _status = "克隆失败";
-                    Debug.LogError($"[Luban] Git clone 失败: {output}");
+                    Directory.CreateDirectory(destDir);
+                    foreach (var file in Directory.GetFiles(srcDir, "*.cs"))
+                        File.Copy(file, Path.Combine(destDir, Path.GetFileName(file)), true);
+                    _status = $"{name} 安装完成";
+                    _installingRuntime = false;
+                    Debug.Log($"[Luban] {name} 安装完成");
+                    AssetDatabase.Refresh();
+                }
+                else
+                {
+                    _status = $"未找到 {name}";
+                }
+            }
+            catch (Exception e)
+            {
+                _status = $"安装失败: {e.Message}";
+                Debug.LogError($"[Luban] {name} 安装失败: {e}");
+            }
+            finally
+            {
+                try { if (File.Exists(tempZip)) File.Delete(tempZip); } catch { }
+                try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true); } catch { }
+            }
+
+            _isProcessing = false;
+            Repaint();
+        }
+
+        private async Task InstallSystemTextJsonWithLubanAsync()
+        {
+            _isProcessing = true;
+            _downloadProgress = 0;
+            _downloadedBytes = 0;
+            _totalBytes = 0;
+
+            var tempZip = Path.Combine(Path.GetTempPath(), "luban_runtime_" + Guid.NewGuid() + ".zip");
+            var tempDir = Path.Combine(Path.GetTempPath(), "luban_runtime_" + Guid.NewGuid());
+
+            try
+            {
+                // 1. 安装 Luban 运行时
+                _status = "正在下载 Luban 运行时...";
+                Repaint();
+
+                await DownloadFileAsync(_editorSettings.templateZipUrl, tempZip);
+
+                _status = "正在解压 Luban 运行时...";
+                _totalBytes = 0;
+                Repaint();
+
+                ZipFile.ExtractToDirectory(tempZip, tempDir);
+
+                var extractedDirs = Directory.GetDirectories(tempDir);
+                var rootDir = extractedDirs.Length > 0 ? extractedDirs[0] : tempDir;
+                var srcDir = Path.Combine(rootDir, "Projects/Csharp_DotNet_json/LubanLib");
+
+                if (Directory.Exists(srcDir))
+                {
+                    Directory.CreateDirectory(LubanRuntimeDir);
+                    CopyDirectory(srcDir, LubanRuntimeDir);
+                    Debug.Log("[Luban] Luban 运行时安装完成");
+                }
+                else
+                {
+                    _status = "未找到 Luban 运行时";
                     _isProcessing = false;
                     Repaint();
                     return;
                 }
 
-                var srcDir = Path.Combine(tempDir, "Projects", "Csharp_DotNet_bin", "LubanLib");
-                if (Directory.Exists(srcDir))
-                {
-                    Directory.CreateDirectory(LubanRuntimeDir);
-                    CopyDirectory(srcDir, LubanRuntimeDir);
-                    _status = "Luban 运行时安装完成";
-                    Debug.Log("[Luban] 运行时安装完成");
-                    AssetDatabase.Refresh();
-                }
-                else
-                {
-                    _status = "未找到运行时库";
-                }
+                // 2. 安装 System.Text.Json
+                await InstallSystemTextJsonPackagesAsync();
 
-                try { Directory.Delete(tempDir, true); } catch { /* ignore cleanup errors */ }
+                _status = "Luban 运行时和 System.Text.Json 安装完成";
+                _installingRuntime = false;
+                AssetDatabase.Refresh();
             }
             catch (Exception e)
             {
                 _status = $"安装失败: {e.Message}";
-                Debug.LogError($"[Luban] 运行时安装失败: {e}");
+                Debug.LogError($"[Luban] 安装失败: {e}");
+            }
+            finally
+            {
+                try { if (File.Exists(tempZip)) File.Delete(tempZip); } catch { }
+                try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true); } catch { }
+            }
+
+            _isProcessing = false;
+            Repaint();
+        }
+
+        private async Task InstallSystemTextJsonPackagesAsync()
+        {
+            var packages = new[]
+            {
+                ("System.Text.Json", "8.0.5"),
+                ("System.Text.Encodings.Web", "8.0.0"),
+                ("Microsoft.Bcl.AsyncInterfaces", "8.0.0"),
+                ("System.Runtime.CompilerServices.Unsafe", "6.0.0"),
+                ("System.Buffers", "4.5.1"),
+                ("System.Memory", "4.5.5"),
+                ("System.Numerics.Vectors", "4.5.0"),
+                ("System.Threading.Tasks.Extensions", "4.5.4"),
+            };
+
+            var tempDir = Path.Combine(Path.GetTempPath(), "systemtextjson_" + Guid.NewGuid());
+            Directory.CreateDirectory(SystemTextJsonDir);
+
+            foreach (var (pkg, ver) in packages)
+            {
+                _status = $"正在下载 {pkg}...";
+                Repaint();
+
+                var nupkgPath = Path.Combine(tempDir, $"{pkg}.nupkg");
+                var extractDir = Path.Combine(tempDir, pkg);
+                Directory.CreateDirectory(tempDir);
+
+                await DownloadFileAsync($"https://www.nuget.org/api/v2/package/{pkg}/{ver}", nupkgPath);
+                ZipFile.ExtractToDirectory(nupkgPath, extractDir);
+
+                var dllPath = Path.Combine(extractDir, "lib", "netstandard2.0", $"{pkg}.dll");
+                if (!File.Exists(dllPath))
+                    dllPath = Path.Combine(extractDir, "lib", "netstandard2.1", $"{pkg}.dll");
+                if (!File.Exists(dllPath))
+                    dllPath = Path.Combine(extractDir, "lib", "netstandard1.1", $"{pkg}.dll");
+
+                if (File.Exists(dllPath))
+                    File.Copy(dllPath, Path.Combine(SystemTextJsonDir, $"{pkg}.dll"), true);
+            }
+
+            try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true); } catch { }
+        }
+
+        private async Task InstallSystemTextJsonAsync(string destDir, string name)
+        {
+            _isProcessing = true;
+            _downloadProgress = 0;
+            _downloadedBytes = 0;
+            _totalBytes = 0;
+
+            var packages = new[]
+            {
+                ("System.Text.Json", "8.0.5"),
+                ("System.Text.Encodings.Web", "8.0.0"),
+                ("Microsoft.Bcl.AsyncInterfaces", "8.0.0"),
+                ("System.Runtime.CompilerServices.Unsafe", "6.0.0"),
+                ("System.Buffers", "4.5.1"),
+                ("System.Memory", "4.5.5"),
+                ("System.Numerics.Vectors", "4.5.0"),
+                ("System.Threading.Tasks.Extensions", "4.5.4"),
+            };
+
+            var tempDir = Path.Combine(Path.GetTempPath(), "systemtextjson_" + Guid.NewGuid());
+            Directory.CreateDirectory(destDir);
+
+            try
+            {
+                foreach (var (pkg, ver) in packages)
+                {
+                    _status = $"正在下载 {pkg}...";
+                    Repaint();
+
+                    var nupkgPath = Path.Combine(tempDir, $"{pkg}.nupkg");
+                    var extractDir = Path.Combine(tempDir, pkg);
+                    Directory.CreateDirectory(tempDir);
+
+                    await DownloadFileAsync($"https://www.nuget.org/api/v2/package/{pkg}/{ver}", nupkgPath);
+                    ZipFile.ExtractToDirectory(nupkgPath, extractDir);
+
+                    var dllPath = Path.Combine(extractDir, "lib", "netstandard2.0", $"{pkg}.dll");
+                    if (!File.Exists(dllPath))
+                        dllPath = Path.Combine(extractDir, "lib", "netstandard2.1", $"{pkg}.dll");
+                    if (!File.Exists(dllPath))
+                        dllPath = Path.Combine(extractDir, "lib", "netstandard1.1", $"{pkg}.dll");
+
+                    if (File.Exists(dllPath))
+                        File.Copy(dllPath, Path.Combine(destDir, $"{pkg}.dll"), true);
+                }
+
+                _status = $"{name} 安装完成";
+                _installingRuntime = false;
+                Debug.Log($"[Luban] {name} 及依赖安装完成");
+                AssetDatabase.Refresh();
+            }
+            catch (Exception e)
+            {
+                _status = $"安装失败: {e.Message}";
+                Debug.LogError($"[Luban] {name} 安装失败: {e}");
+            }
+            finally
+            {
+                try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true); } catch { }
+            }
+
+            _isProcessing = false;
+            Repaint();
+        }
+
+        private async Task InstallNewtonsoftAsync(string destDir, string name)
+        {
+            _isProcessing = true;
+            _status = $"正在下载 {name}...";
+            _downloadProgress = 0;
+            _downloadedBytes = 0;
+            _totalBytes = 0;
+            Repaint();
+
+            var tempZip = Path.Combine(Path.GetTempPath(), "newtonsoft_" + Guid.NewGuid() + ".zip");
+            var tempDir = Path.Combine(Path.GetTempPath(), "newtonsoft_" + Guid.NewGuid());
+
+            try
+            {
+                await DownloadFileAsync("https://github.com/jilleJr/Newtonsoft.Json-for-Unity/archive/refs/heads/master.zip", tempZip);
+
+                _status = "正在解压...";
+                _totalBytes = 0;
+                Repaint();
+
+                ZipFile.ExtractToDirectory(tempZip, tempDir);
+
+                var srcDir = Path.Combine(tempDir, "Newtonsoft.Json-for-Unity-master", "Src", "Newtonsoft.Json");
+                if (Directory.Exists(srcDir))
+                {
+                    Directory.CreateDirectory(destDir);
+                    CopyDirectory(srcDir, destDir);
+                    _status = $"{name} 安装完成";
+                    _installingRuntime = false;
+                    Debug.Log($"[Luban] {name} 安装完成");
+                    AssetDatabase.Refresh();
+                }
+                else
+                {
+                    _status = $"未找到 {name}";
+                }
+            }
+            catch (Exception e)
+            {
+                _status = $"安装失败: {e.Message}";
+                Debug.LogError($"[Luban] {name} 安装失败: {e}");
+            }
+            finally
+            {
+                try { if (File.Exists(tempZip)) File.Delete(tempZip); } catch { }
+                try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true); } catch { }
+            }
+
+            _isProcessing = false;
+            Repaint();
+        }
+
+        private async Task InstallRuntimeAsync(string destDir, string srcPath, string name)
+        {
+            _isProcessing = true;
+            _status = $"正在下载 {name}...";
+            _downloadProgress = 0;
+            _downloadedBytes = 0;
+            _totalBytes = 0;
+            Repaint();
+
+            var tempZip = Path.Combine(Path.GetTempPath(), "luban_runtime_" + Guid.NewGuid() + ".zip");
+            var tempDir = Path.Combine(Path.GetTempPath(), "luban_runtime_" + Guid.NewGuid());
+
+            try
+            {
+                await DownloadFileAsync(_editorSettings.templateZipUrl, tempZip);
+
+                _status = "正在解压...";
+                _totalBytes = 0;
+                Repaint();
+
+                ZipFile.ExtractToDirectory(tempZip, tempDir);
+
+                var extractedDirs = Directory.GetDirectories(tempDir);
+                var rootDir = extractedDirs.Length > 0 ? extractedDirs[0] : tempDir;
+                var srcDir = Path.Combine(rootDir, srcPath);
+
+                if (Directory.Exists(srcDir))
+                {
+                    Directory.CreateDirectory(destDir);
+                    CopyDirectory(srcDir, destDir);
+                    _status = $"{name} 安装完成";
+                    _installingRuntime = false;
+                    Debug.Log($"[Luban] {name} 安装完成");
+                    AssetDatabase.Refresh();
+                }
+                else
+                {
+                    _status = $"未找到 {name}";
+                }
+            }
+            catch (Exception e)
+            {
+                _status = $"安装失败: {e.Message}";
+                Debug.LogError($"[Luban] {name} 安装失败: {e}");
+            }
+            finally
+            {
+                try { if (File.Exists(tempZip)) File.Delete(tempZip); } catch { }
+                try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true); } catch { }
             }
 
             _isProcessing = false;
@@ -363,30 +746,33 @@ namespace Puffin.Modules.ConfigModule.Editor
         private async Task DownloadMiniTemplateAsync(string destDir)
         {
             _isProcessing = true;
-            _status = "正在克隆 MiniTemplate...";
+            _status = "正在下载模板...";
+            _downloadProgress = 0;
+            _downloadedBytes = 0;
+            _totalBytes = 0;
             Repaint();
+
+            var tempZip = Path.Combine(Path.GetTempPath(), "luban_template_" + Guid.NewGuid() + ".zip");
+            var tempDir = Path.Combine(Path.GetTempPath(), "luban_template_" + Guid.NewGuid());
 
             try
             {
-                var tempDir = Path.Combine(Path.GetTempPath(), "luban_examples_" + Guid.NewGuid());
+                await DownloadFileAsync(_editorSettings.templateZipUrl, tempZip);
 
-                if (!RunCommand("git", $"clone --depth 1 {_editorSettings.templateRepoUrl} \"{tempDir}\"", out var output))
-                {
-                    _status = "克隆失败，请确保已安装 Git";
-                    Debug.LogError($"[Luban] Git clone 失败: {output}");
-                    _isProcessing = false;
-                    Repaint();
-                    return;
-                }
+                _status = "正在解压...";
+                _totalBytes = 0;
+                Repaint();
 
-                await Task.Yield();
+                ZipFile.ExtractToDirectory(tempZip, tempDir);
 
-                var miniDir = Path.Combine(tempDir, "MiniTemplate");
+                var extractedDirs = Directory.GetDirectories(tempDir);
+                var rootDir = extractedDirs.Length > 0 ? extractedDirs[0] : tempDir;
+                var miniDir = Path.Combine(rootDir, "MiniTemplate");
+
                 if (Directory.Exists(miniDir))
                 {
                     CopyDirectory(miniDir, destDir);
-                    var confPath = Path.Combine(destDir, "luban.conf");
-                    File.WriteAllText(confPath, LubanSettings.Instance.GenerateLubanConf());
+                    File.WriteAllText(Path.Combine(destDir, "luban.conf"), LubanSettings.Instance.GenerateLubanConf());
                     _status = "模板创建完成";
                     _hasTemplate = true;
                     Debug.Log("[Luban] MiniTemplate 安装完成");
@@ -396,13 +782,17 @@ namespace Puffin.Modules.ConfigModule.Editor
                     _status = "未找到 MiniTemplate";
                 }
 
-                Directory.Delete(tempDir, true);
                 AssetDatabase.Refresh();
             }
             catch (Exception e)
             {
                 _status = $"下载失败: {e.Message}";
                 Debug.LogError($"[Luban] 下载失败: {e}");
+            }
+            finally
+            {
+                try { if (File.Exists(tempZip)) File.Delete(tempZip); } catch { }
+                try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true); } catch { }
             }
 
             _isProcessing = false;
@@ -452,14 +842,17 @@ namespace Puffin.Modules.ConfigModule.Editor
         {
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
 
+            _status = _useProxy ? "正在连接服务器 (使用代理)..." : "正在连接服务器...";
+            Repaint();
+
             using var handler = new HttpClientHandler
             {
                 AllowAutoRedirect = true,
-                Proxy = WebRequest.GetSystemWebProxy(),
-                UseProxy = true
+                Proxy = _useProxy ? WebRequest.GetSystemWebProxy() : null,
+                UseProxy = _useProxy
             };
             using var client = new HttpClient(handler);
-            client.Timeout = TimeSpan.FromMinutes(5);
+            client.Timeout = TimeSpan.FromMinutes(10);
             client.DefaultRequestHeaders.Add("User-Agent", "Unity");
 
             using var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
@@ -467,6 +860,7 @@ namespace Puffin.Modules.ConfigModule.Editor
 
             _totalBytes = response.Content.Headers.ContentLength ?? 0;
             _downloadedBytes = 0;
+            _status = "正在下载...";
             Repaint();
 
             await using var contentStream = await response.Content.ReadAsStreamAsync();
@@ -560,6 +954,12 @@ namespace Puffin.Modules.ConfigModule.Editor
         private void GenerateConfig()
         {
             _isProcessing = true;
+            _status = "正在保存配置...";
+            Repaint();
+
+            // 生成前先保存配置
+            SaveLubanConf();
+
             _status = "正在生成配置...";
             Repaint();
 
@@ -567,13 +967,6 @@ namespace Puffin.Modules.ConfigModule.Editor
             {
                 var confDir = GetLubanConfigDir();
                 var confPath = Path.Combine(confDir, "luban.conf");
-                if (!File.Exists(confPath))
-                {
-                    _status = "未找到 luban.conf，请先保存配置";
-                    _isProcessing = false;
-                    Repaint();
-                    return;
-                }
 
                 var settings = LubanSettings.Instance;
                 var codeTarget = LubanSettings.GetCodeTargetString(settings.codeTarget);

@@ -6,12 +6,12 @@ using L = Puffin.Editor.Localization.EditorLocalization;
 
 namespace Puffin.Editor
 {
-    [CustomEditor(typeof(Puffinettings))]
+    [CustomEditor(typeof(PuffinSettings))]
     public class PuffinettingsEditor : UnityEditor.Editor
     {
         public override void OnInspectorGUI()
         {
-            var settings = (Puffinettings)target;
+            var settings = (PuffinSettings)target;
             serializedObject.Update();
 
             // 语言选择

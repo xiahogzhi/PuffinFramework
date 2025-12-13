@@ -11,17 +11,15 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 764d5118eed9433499dd2ed0fa605f07, type: 3}
   m_Name: LubanSettings
-  m_EditorClassIdentifier: XFramework.Config.Editor::XFrameworks.Modules.ConfigModule.Editor.LubanSettings
+  m_EditorClassIdentifier: PuffinFramework.Config.Editor::Puffin.Modules.ConfigModule.Editor.LubanSettings
   dataDir: Datas
   defineDir: Defines
-  outputCodeDir: ../Assets/XFrameworks/Modules/ConfigModule/Runtime/Generate
-  outputDataDir: ../Assets/XFrameworks/Modules/ConfigModule/Resources
-  codeTarget: 0
-  dataTarget: 0
-  topModule: XFrameworks.ConfigModule.Gen
+  outputCodeDir: ../Assets/Puffin/Modules/ConfigModule/Runtime/Generate
+  outputDataDir: ../Assets/Puffin/Modules/ConfigModule/Resources
+  codeTarget: 2
+  dataTarget: 1
+  topModule: PuffinFramework.Config.Gen
   managerName: Tables
-  defaultGroup: c
-  inputDataType: 0
   enableAutoImport: 1
   timeZone: 
   customTemplateDir: 
