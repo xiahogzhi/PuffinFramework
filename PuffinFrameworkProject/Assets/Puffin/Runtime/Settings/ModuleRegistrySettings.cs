@@ -138,6 +138,18 @@ namespace Puffin.Runtime.Settings
         private void OnValidate()
         {
             ClearCache();
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.delayCall += () => OnSettingsChanged?.Invoke();
+#endif
         }
+
+#if UNITY_EDITOR
+        public static event System.Action OnSettingsChanged;
+
+        public static void NotifySettingsChanged()
+        {
+            OnSettingsChanged?.Invoke();
+        }
+#endif
     }
 }

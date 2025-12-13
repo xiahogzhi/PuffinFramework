@@ -127,7 +127,8 @@ namespace Puffin.Runtime.Core
             ScannerConfig = setupContext.ScannerConfig ?? Puffinettings.Instance.ToScannerConfig();
             RuntimeConfig = setupContext.runtimeConfig ?? Puffinettings.Instance.ToRuntimeConfig();
             IsSetup = true;
-            Logger.Info("Puffin Framework Setup!");
+            if (_editorRuntime == null)
+                Logger.Info("Puffin Framework Setup!");
         }
 
         static void ThrowIfNotSetup()

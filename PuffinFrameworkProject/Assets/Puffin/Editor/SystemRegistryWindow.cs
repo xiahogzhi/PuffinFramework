@@ -575,6 +575,7 @@ namespace Puffin.Editor
             SyncEnabledToSettings();
             _settings.ClearCache();
             EditorUtility.SetDirty(_settings);
+            SystemRegistrySettings.NotifySettingsChanged();
         }
 
         /// <summary>

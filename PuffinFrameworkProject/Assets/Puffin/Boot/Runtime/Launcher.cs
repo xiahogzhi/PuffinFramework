@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using Cysharp.Threading.Tasks;
@@ -9,8 +10,10 @@ using Puffin.Runtime.Interfaces;
 using Puffin.Runtime.Interfaces.SystemEvents;
 using Puffin.Runtime.Settings;
 using Puffin.Runtime.Tools;
+#if UNITY_EDITOR
 using UnityEditor;
-using UnityEngine;
+#endif
+using UnityEngine; 
 
 namespace Puffin.Boot.Runtime
 {
@@ -26,7 +29,7 @@ namespace Puffin.Boot.Runtime
             if (launcher != null)
             {
                 launcher.Setup();
-                
+
                 var settings = Puffinettings.Instance;
                 if (settings != null && settings.autoInitialize)
                 {
@@ -44,9 +47,14 @@ namespace Puffin.Boot.Runtime
         {
             EditorApplication.delayCall += InitializeEditorSystems;
             EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
+
+            // 监听设置变化
+            ModuleRegistrySettings.OnSettingsChanged += OnRegistrySettingsChanged;
+            SystemRegistrySettings.OnSettingsChanged += OnRegistrySettingsChanged;
         }
 
         private static GameSystemRuntime _editorRuntime;
+        private static ScannerConfig _cachedScannerConfig;
 
         private static void OnPlayModeStateChanged(PlayModeStateChange state)
         {
@@ -65,7 +73,6 @@ namespace Puffin.Boot.Runtime
 
         private static void InitializeEditorSystems()
         {
-           
             if (EditorApplication.isPlayingOrWillChangePlaymode)
                 return;
 
@@ -77,7 +84,7 @@ namespace Puffin.Boot.Runtime
             try
             {
                 await UniTask.Yield();
-                
+
                 var settings = Puffinettings.Instance;
                 var scannerConfig = settings.ToScannerConfig();
                 var runtimeConfig = settings.ToRuntimeConfig();
@@ -87,7 +94,7 @@ namespace Puffin.Boot.Runtime
                 context.Logger = new DefaultLogger();
                 context.ScannerConfig = scannerConfig;
                 context.runtimeConfig = runtimeConfig;
-                
+
                 _editorRuntime = new GameSystemRuntime(context.Logger);
                 _editorRuntime.IsEditorMode = true;
                 _editorRuntime.EnableProfiling = runtimeConfig.EnableProfiling;
@@ -104,7 +111,10 @@ namespace Puffin.Boot.Runtime
                 // 注册系统（不调用运行时生命周期，只调用 OnRegister 和 OnInitializeAsync）
                 await _editorRuntime.CreateSystemFromTypesAsync(editorSystemTypes);
 
-                // 调用编辑器初始化 
+                // 缓存配置用于后续同步
+                _cachedScannerConfig = scannerConfig;
+
+                // 调用编辑器初始化
                 foreach (var system in _editorRuntime.GetAllSystems())
                 {
                     if (system is IEditorSupport editorSupport)
@@ -123,6 +133,51 @@ namespace Puffin.Boot.Runtime
             catch (Exception e)
             {
                 Debug.LogException(e);
+            }
+        }
+
+        private static void OnRegistrySettingsChanged()
+        {
+            if (_editorRuntime == null || _cachedScannerConfig == null)
+                return;
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+                return;
+
+            SyncEditorSystemsAsync().Forget();
+        }
+
+        private static async UniTask SyncEditorSystemsAsync()
+        {
+            // 获取当前应该注册的系统类型
+            var expectedTypes = new HashSet<Type>(ScanEditorSupportSystems(_cachedScannerConfig));
+
+            // 获取当前已注册的系统类型
+            var registeredTypes = new HashSet<Type>(_editorRuntime.GetAllSystems().Select(s => s.GetType()));
+
+            // 找出需要取消注册的系统（已注册但不应该存在的）
+            var toUnregister = registeredTypes.Except(expectedTypes).ToList();
+            foreach (var type in toUnregister)
+                _editorRuntime.UnRegister(type);
+
+            // 找出需要注册的系统（应该存在但未注册的）
+            var toRegister = expectedTypes.Except(registeredTypes).ToList();
+            foreach (var type in toRegister)
+            {
+                await _editorRuntime.RegisterSystemAsync(type);
+
+                // 调用编辑器初始化
+                var system = _editorRuntime.GetAllSystems().FirstOrDefault(s => s.GetType() == type);
+                if (system is IEditorSupport editorSupport)
+                {
+                    try
+                    {
+                        editorSupport.OnEditorInitialize();
+                    }
+                    catch (Exception e)
+                    {
+                        Debug.LogException(e);
+                    }
+                }
             }
         }
 
@@ -152,6 +207,11 @@ namespace Puffin.Boot.Runtime
             if (config.ExcludeAssemblyPrefixes.Any(p => name.StartsWith(p)))
                 return false;
 
+            // 检查模块是否被禁用
+            var moduleSettings = ModuleRegistrySettings.Instance;
+            if (moduleSettings != null && moduleSettings.IsAssemblyDisabled(name))
+                return false;
+
             if (config.AssemblyPrefixes.Count > 0)
                 return config.AssemblyPrefixes.Any(p => name.StartsWith(p));
 
@@ -170,6 +230,11 @@ namespace Puffin.Boot.Runtime
             if (config.RequireAutoRegister && type.GetCustomAttribute<AutoRegisterAttribute>() == null)
                 return false;
 
+            // 检查系统是否被禁用
+            var systemSettings = SystemRegistrySettings.Instance;
+            if (systemSettings != null && systemSettings.IsSystemDisabled(type))
+                return false;
+
             return true;
         }
 #endif
@@ -185,7 +250,6 @@ namespace Puffin.Boot.Runtime
         /// </summary>
         public virtual void Setup()
         {
-            
             SetupContext context = new SetupContext();
             context.Logger = new DefaultLogger();
             context.ResourcesLoader = new DefaultResourceLoader();

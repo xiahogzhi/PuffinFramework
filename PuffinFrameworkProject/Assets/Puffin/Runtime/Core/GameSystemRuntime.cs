@@ -96,7 +96,7 @@ namespace Puffin.Runtime.Core
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             InitializeDefinedSymbols();
         }
-        
+
         private void InitializeDefinedSymbols()
         {
 #if UNITY_EDITOR
@@ -139,8 +139,6 @@ namespace Puffin.Runtime.Core
         {
             return type.GetCustomAttribute<SystemPriorityAttribute>()?.Priority ?? 0;
         }
-
-
 
 
         #region 系统访问
@@ -197,7 +195,7 @@ namespace Puffin.Runtime.Core
                 Name = type.Name,
                 Alias = type.GetCustomAttribute<SystemAliasAttribute>()?.Alias,
                 Type = type,
-                IsEnabled = system is not ISystemEnabled { Enabled: false },
+                IsEnabled = system is not ISystemEnabled {Enabled: false},
                 IsInitialized = _initializedSystems.Contains(system),
                 Priority = GetSystemPriority(type),
                 LastUpdateMs = perf?.LastMs ?? 0,
@@ -220,7 +218,7 @@ namespace Puffin.Runtime.Core
                     Name = type.Name,
                     Alias = type.GetCustomAttribute<SystemAliasAttribute>()?.Alias,
                     Type = type,
-                    IsEnabled = sys is not ISystemEnabled { Enabled: false },
+                    IsEnabled = sys is not ISystemEnabled {Enabled: false},
                     IsInitialized = _initializedSystems.Contains(sys),
                     Priority = GetSystemPriority(type),
                     LastUpdateMs = perf?.LastMs ?? 0,
@@ -239,6 +237,7 @@ namespace Puffin.Runtime.Core
                 if (assemblyName.Contains(module.moduleId))
                     return module.moduleId;
             }
+
             return null;
         }
 
@@ -319,14 +318,26 @@ namespace Puffin.Runtime.Core
 
             if (_typeToInstance[type] is IRegisterEvent reg)
             {
-                try { reg.OnRegister(); }
-                catch (Exception e) { _logger.Exception(e); }
+                try
+                {
+                    reg.OnRegister();
+                }
+                catch (Exception e)
+                {
+                    _logger.Exception(e);
+                }
             }
 
             if (_typeToInstance[type] is IInitializeAsync init)
             {
-                try { await init.OnInitializeAsync(); }
-                catch (Exception e) { _logger.Exception(e); }
+                try
+                {
+                    await init.OnInitializeAsync();
+                }
+                catch (Exception e)
+                {
+                    _logger.Exception(e);
+                }
             }
 
             _initializedSystems.Add(_typeToInstance[type]);
@@ -338,6 +349,48 @@ namespace Puffin.Runtime.Core
         public void RegisterSystem<T>() where T : class, IGameSystem, new()
         {
             RegisterSystemAsync<T>().Forget();
+        }
+
+        /// <summary>
+        /// 动态注册单个系统（通过类型）
+        /// </summary>
+        public async UniTask RegisterSystemAsync(Type type)
+        {
+            if (_typeToInstance.ContainsKey(type))
+            {
+                _logger.Info($"系统 {type.Name} 已注册，跳过");
+                return;
+            }
+
+            Register(type);
+            InjectDependencies(_typeToInstance[type]);
+            SortByPriority();
+
+            if (_typeToInstance[type] is IRegisterEvent reg)
+            {
+                try
+                {
+                    reg.OnRegister();
+                }
+                catch (Exception e)
+                {
+                    _logger.Exception(e);
+                }
+            }
+
+            if (_typeToInstance[type] is IInitializeAsync init)
+            {
+                try
+                {
+                    await init.OnInitializeAsync();
+                }
+                catch (Exception e)
+                {
+                    _logger.Exception(e);
+                }
+            }
+
+            _initializedSystems.Add(_typeToInstance[type]);
         }
 
         /// <summary>
@@ -405,7 +458,8 @@ namespace Puffin.Runtime.Core
                 _updateIntervals[system] = new UpdateIntervalData(intervalAttr.FrameInterval);
             }
 
-            _logger.Info($"注册系统: {GetSystemName(system)}");
+            if (!IsEditorMode)
+                _logger.Info($"注册系统: {GetSystemName(system)}");
             OnSystemRegistered?.Invoke(system);
         }
 
@@ -414,14 +468,28 @@ namespace Puffin.Runtime.Core
         /// </summary>
         public void UnRegister<T>() where T : class, IGameSystem
         {
-            if (!_typeToInstance.TryGetValue(typeof(T), out var system))
+            UnRegister(typeof(T));
+        }
+
+        /// <summary>
+        /// 注销系统（通过类型）
+        /// </summary>
+        public void UnRegister(Type type)
+        {
+            if (!_typeToInstance.TryGetValue(type, out var system))
                 return;
 
             // 触发注销事件
             if (system is IRegisterEvent reg)
             {
-                try { reg.OnUnRegister(); }
-                catch (Exception e) { _logger.Exception(e); }
+                try
+                {
+                    reg.OnUnRegister();
+                }
+                catch (Exception e)
+                {
+                    _logger.Exception(e);
+                }
             }
 
             _systems.Remove(system);
@@ -451,7 +519,8 @@ namespace Puffin.Runtime.Core
             // 移除 Update 间隔
             _updateIntervals.Remove(system);
 
-            _logger.Info($"注销系统: {GetSystemName(system)}");
+            if (!IsEditorMode)
+                _logger.Info($"注销系统: {GetSystemName(system)}");
             OnSystemUnregistered?.Invoke(system);
         }
 
@@ -496,10 +565,10 @@ namespace Puffin.Runtime.Core
 
             foreach (var sys in _updateList)
             {
-                if (sys is ISystemEnabled { Enabled: false }) continue;
+                if (sys is ISystemEnabled {Enabled: false}) continue;
 
                 // 检查 Update 间隔
-                var gameSystem = (IGameSystem)sys;
+                var gameSystem = (IGameSystem) sys;
                 if (_updateIntervals.TryGetValue(gameSystem, out var intervalData))
                 {
                     if (!intervalData.ShouldUpdate(_frameCount))
@@ -533,7 +602,7 @@ namespace Puffin.Runtime.Core
 
             foreach (var sys in _fixedUpdateList)
             {
-                if (sys is ISystemEnabled { Enabled: false }) continue;
+                if (sys is ISystemEnabled {Enabled: false}) continue;
                 try
                 {
                     sys.OnFixedUpdate(deltaTime);
@@ -551,7 +620,7 @@ namespace Puffin.Runtime.Core
 
             foreach (var sys in _lateUpdateList)
             {
-                if (sys is ISystemEnabled { Enabled: false }) continue;
+                if (sys is ISystemEnabled {Enabled: false}) continue;
                 try
                 {
                     sys.OnLateUpdate(deltaTime);
@@ -567,8 +636,14 @@ namespace Puffin.Runtime.Core
         {
             foreach (var sys in _quitList)
             {
-                try { sys.OnApplicationQuit(); }
-                catch (Exception e) { _logger.Exception(e); }
+                try
+                {
+                    sys.OnApplicationQuit();
+                }
+                catch (Exception e)
+                {
+                    _logger.Exception(e);
+                }
             }
         }
 
@@ -576,8 +651,14 @@ namespace Puffin.Runtime.Core
         {
             foreach (var sys in _focusList)
             {
-                try { sys.OnApplicationFocus(focus); }
-                catch (Exception e) { _logger.Exception(e); }
+                try
+                {
+                    sys.OnApplicationFocus(focus);
+                }
+                catch (Exception e)
+                {
+                    _logger.Exception(e);
+                }
             }
         }
 
@@ -585,8 +666,14 @@ namespace Puffin.Runtime.Core
         {
             foreach (var sys in _pauseList)
             {
-                try { sys.OnApplicationPause(pause); }
-                catch (Exception e) { _logger.Exception(e); }
+                try
+                {
+                    sys.OnApplicationPause(pause);
+                }
+                catch (Exception e)
+                {
+                    _logger.Exception(e);
+                }
             }
         }
 
@@ -599,8 +686,14 @@ namespace Puffin.Runtime.Core
             if (IsEditorMode) return;
             foreach (var sys in _registerList)
             {
-                try { sys.OnRegister(); }
-                catch (Exception e) { _logger.Exception(e); }
+                try
+                {
+                    sys.OnRegister();
+                }
+                catch (Exception e)
+                {
+                    _logger.Exception(e);
+                }
             }
         }
 
@@ -618,7 +711,7 @@ namespace Puffin.Runtime.Core
                 try
                 {
                     await sys.OnInitializeAsync();
-                    _initializedSystems.Add((IGameSystem)sys);
+                    _initializedSystems.Add((IGameSystem) sys);
                 }
                 catch (Exception e)
                 {
@@ -648,14 +741,14 @@ namespace Puffin.Runtime.Core
             int Compare(IGameSystem a, IGameSystem b) => GetSystemPriority(a).CompareTo(GetSystemPriority(b));
 
             _systems.Sort(Compare);
-            _updateList.Sort((a, b) => Compare((IGameSystem)a, (IGameSystem)b));
-            _fixedUpdateList.Sort((a, b) => Compare((IGameSystem)a, (IGameSystem)b));
-            _lateUpdateList.Sort((a, b) => Compare((IGameSystem)a, (IGameSystem)b));
-            _quitList.Sort((a, b) => Compare((IGameSystem)a, (IGameSystem)b));
-            _focusList.Sort((a, b) => Compare((IGameSystem)a, (IGameSystem)b));
-            _pauseList.Sort((a, b) => Compare((IGameSystem)a, (IGameSystem)b));
-            _registerList.Sort((a, b) => Compare((IGameSystem)a, (IGameSystem)b));
-            _initAsyncList.Sort((a, b) => Compare((IGameSystem)a, (IGameSystem)b));
+            _updateList.Sort((a, b) => Compare((IGameSystem) a, (IGameSystem) b));
+            _fixedUpdateList.Sort((a, b) => Compare((IGameSystem) a, (IGameSystem) b));
+            _lateUpdateList.Sort((a, b) => Compare((IGameSystem) a, (IGameSystem) b));
+            _quitList.Sort((a, b) => Compare((IGameSystem) a, (IGameSystem) b));
+            _focusList.Sort((a, b) => Compare((IGameSystem) a, (IGameSystem) b));
+            _pauseList.Sort((a, b) => Compare((IGameSystem) a, (IGameSystem) b));
+            _registerList.Sort((a, b) => Compare((IGameSystem) a, (IGameSystem) b));
+            _initAsyncList.Sort((a, b) => Compare((IGameSystem) a, (IGameSystem) b));
         }
 
         #endregion
@@ -696,7 +789,8 @@ namespace Puffin.Runtime.Core
             return result.ToArray();
         }
 
-        private void Visit(Type type, HashSet<Type> typeSet, HashSet<Type> visited, HashSet<Type> visiting, List<Type> result, HashSet<Type> disabled)
+        private void Visit(Type type, HashSet<Type> typeSet, HashSet<Type> visited, HashSet<Type> visiting,
+            List<Type> result, HashSet<Type> disabled)
         {
             if (visited.Contains(type) || disabled.Contains(type)) return;
             if (visiting.Contains(type))
@@ -840,6 +934,7 @@ namespace Puffin.Runtime.Core
                     _lastUpdateFrame = currentFrame;
                     return true;
                 }
+
                 return false;
             }
         }

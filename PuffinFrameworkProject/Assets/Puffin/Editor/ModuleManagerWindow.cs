@@ -742,6 +742,7 @@ namespace Puffin.Editor
                 _settings.ClearCache();
                 EditorUtility.SetDirty(_settings);
                 UpdateEnabledStates();
+                ModuleRegistrySettings.NotifySettingsChanged();
             }
         }
 
@@ -752,6 +753,7 @@ namespace Puffin.Editor
             _settings.ClearCache();
             EditorUtility.SetDirty(_settings);
             UpdateEnabledStates();
+            ModuleRegistrySettings.NotifySettingsChanged();
         }
 
         #endregion
