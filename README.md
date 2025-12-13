@@ -13,7 +13,7 @@
 ## 项目结构
 
 ```
-Assets/PuffinFrameworks/
+Assets/Puffin/
 ├── Runtime/                    # 运行时代码
 │   ├── Core/                   # 核心系统（系统管理、依赖注入、生命周期）
 │   ├── Events/                 # 事件系统
@@ -59,13 +59,13 @@ var mySystem = PuffinFramework.GetSystem<IMySystem>();
 
 ```csharp
 // 注册事件
-PuffinFramework.globalDispatcher.Register<MyEvent>(e => Handle(e))
+PuffinFramework.Dispatcher.Register<MyEvent>(e => Handle(e))
     .Priority(100)
     .Once()
     .AddTo(gameObject);
 
 // 发送事件
-PuffinFramework.globalDispatcher.Send(new MyEvent { Data = value });
+PuffinFramework.Dispatcher.Send(new MyEvent { Data = value });
 ```
 
 ### 定时器
@@ -112,8 +112,6 @@ var value = MySettings.Instance.Value;
 ## 依赖
 
 - UniTask
-- Odin Inspector
-- DOTween
 
 ## License
 
