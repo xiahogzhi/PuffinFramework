@@ -1,0 +1,8 @@
+{
+    "moduleId": "Timer",
+    "displayName": "Timer Module",
+    "version": "1.0.0",
+    "author": "InputName",
+    "description": "通用计时器",
+    "dependencies": []
+}

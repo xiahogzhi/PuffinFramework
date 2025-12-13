@@ -1,0 +1,8 @@
+{
+    "moduleId": "Config",
+    "displayName": "Config Module",
+    "version": "1.0.0",
+    "author": "InputName",
+    "description": "Luban 配置表集成模块",
+    "dependencies": []
+}

@@ -1,0 +1,18 @@
+{
+    "name": "PuffinFramework.Editor",
+    "rootNamespace": "",
+    "references": [
+        "GUID:38a90ffdb913bc540a8d016ca92935c0"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
