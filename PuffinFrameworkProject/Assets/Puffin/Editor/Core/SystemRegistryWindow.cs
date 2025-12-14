@@ -10,7 +10,7 @@ using UnityEditor;
 using UnityEngine;
 using L = Puffin.Editor.Localization.EditorLocalization;
 
-namespace Puffin.Editor
+namespace Puffin.Editor.Core
 {
     public class SystemRegistryWindow : EditorWindow
     {

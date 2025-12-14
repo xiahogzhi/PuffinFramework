@@ -6,7 +6,7 @@ using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
-namespace Puffin.Editor.Environment
+namespace Puffin.Editor.Environment.Core
 {
     public static class AsmdefHelper
     {

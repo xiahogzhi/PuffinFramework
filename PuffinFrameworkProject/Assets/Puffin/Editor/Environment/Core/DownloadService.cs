@@ -7,7 +7,7 @@ using Cysharp.Threading.Tasks;
 using UnityEditor;
 using UnityEngine;
 
-namespace Puffin.Editor.Environment
+namespace Puffin.Editor.Environment.Core
 {
     public enum TaskState { Downloading, Downloaded, Installing, Completed, Failed, Cancelled }
 

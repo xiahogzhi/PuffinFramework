@@ -2,7 +2,7 @@
 using System.Diagnostics;
 using System.IO;
 
-namespace Puffin.Editor.Environment
+namespace Puffin.Editor.Environment.Core
 {
     public static class EnvironmentChecker
     {

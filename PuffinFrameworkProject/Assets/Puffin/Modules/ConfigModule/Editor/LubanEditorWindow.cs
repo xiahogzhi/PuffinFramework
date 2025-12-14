@@ -5,6 +5,8 @@ using System.IO;
 using System.Linq;
 using Cysharp.Threading.Tasks;
 using Puffin.Editor.Environment;
+using Puffin.Editor.Environment.Core;
+using Puffin.Editor.Environment.UI;
 using Puffin.Modules.ConfigModule.Runtime;
 using Puffin.Runtime.Core;
 using UnityEditor;

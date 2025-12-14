@@ -2,10 +2,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Puffin.Editor.Environment.Core;
 using UnityEditor;
 using UnityEngine;
 
-namespace Puffin.Editor.Environment
+namespace Puffin.Editor.Environment.UI
 {
     public class InstallWindow : EditorWindow
     {

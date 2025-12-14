@@ -6,7 +6,7 @@ using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Networking;
 
-namespace Puffin.Editor.Environment
+namespace Puffin.Editor.Environment.Core
 {
     public class Downloader
     {

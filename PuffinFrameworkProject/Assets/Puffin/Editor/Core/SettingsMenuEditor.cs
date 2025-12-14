@@ -1,7 +1,7 @@
 using Puffin.Runtime.Settings;
 using UnityEditor;
 
-namespace Puffin.Editor
+namespace Puffin.Editor.Core
 {
     /// <summary>
     /// 设置菜单编辑器

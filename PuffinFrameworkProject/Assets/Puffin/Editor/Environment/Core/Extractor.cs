@@ -7,7 +7,7 @@ using Cysharp.Threading.Tasks;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
 
-namespace Puffin.Editor.Environment
+namespace Puffin.Editor.Environment.Core
 {
     public static class Extractor
     {

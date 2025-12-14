@@ -3,7 +3,7 @@ using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
-namespace Puffin.Editor.Environment
+namespace Puffin.Editor.Environment.UI
 {
     /// <summary>
     /// 模块依赖检测 UI 组件

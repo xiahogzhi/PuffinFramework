@@ -8,7 +8,7 @@ using UnityEditor;
 using UnityEngine;
 using L = Puffin.Editor.Localization.EditorLocalization;
 
-namespace Puffin.Editor
+namespace Puffin.Editor.Core
 {
     public class ModuleManagerWindow : EditorWindow
     {
@@ -154,6 +154,10 @@ namespace Puffin.Editor
             // 编辑按钮
             if (GUILayout.Button("✎", GUILayout.Width(22)))
                 StartEdit(module);
+
+            // 发布按钮
+            if (GUILayout.Button("📦", GUILayout.Width(22)))
+                Hub.UI.PublishModuleWindow.ShowWithPath(module.FolderPath);
 
             // 导出按钮
             if (GUILayout.Button("↑", GUILayout.Width(22)))

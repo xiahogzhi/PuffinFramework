@@ -1,8 +1,9 @@
 #if UNITY_EDITOR
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using Puffin.Editor.Environment.Core;
 
-namespace Puffin.Editor.Environment
+namespace Puffin.Editor.Environment.Installers
 {
     public interface IPackageInstaller
     {

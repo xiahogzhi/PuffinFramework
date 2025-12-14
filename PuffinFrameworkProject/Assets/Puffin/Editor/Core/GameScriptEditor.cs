@@ -11,7 +11,7 @@ using UnityEditor;
 using UnityEngine;
 using L = Puffin.Editor.Localization.EditorLocalization;
 
-namespace Puffin.Editor
+namespace Puffin.Editor.Core
 {
     /// <summary>
     /// GameScript 编辑器扩展，提供自动引用赋值功能

@@ -4,7 +4,7 @@ using Puffin.Runtime.Settings;
 using UnityEditor;
 using UnityEngine;
 
-namespace Puffin.Editor
+namespace Puffin.Editor.Core
 {
     /// <summary>
     /// 编辑器启动时自动初始化所有设置

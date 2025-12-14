@@ -3,9 +3,10 @@ using System;
 using System.IO;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using Puffin.Editor.Environment.Core;
 using UnityEngine;
 
-namespace Puffin.Editor.Environment
+namespace Puffin.Editor.Environment.Installers
 {
     public class GitHubRepoInstaller : IPackageInstaller
     {

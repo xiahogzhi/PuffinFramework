@@ -4,7 +4,7 @@ using UnityEditor;
 using UnityEngine;
 using L = Puffin.Editor.Localization.EditorLocalization;
 
-namespace Puffin.Editor
+namespace Puffin.Editor.Core
 {
     [CustomEditor(typeof(LogSettings))]
     public class LogSettingsEditor : UnityEditor.Editor
