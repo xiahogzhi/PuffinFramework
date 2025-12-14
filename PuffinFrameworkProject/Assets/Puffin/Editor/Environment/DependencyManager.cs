@@ -30,10 +30,10 @@ namespace Puffin.Editor.Environment
 
             _installers = new Dictionary<DependencySource, IPackageInstaller>
             {
-                { DependencySource.NuGet, new NuGetInstaller() },
-                { DependencySource.GitHubRepo, new GitHubRepoInstaller() },
-                { DependencySource.GitHubRelease, new GitHubReleaseInstaller() },
-                { DependencySource.DirectUrl, new DirectUrlInstaller() }
+                {DependencySource.NuGet, new NuGetInstaller()},
+                {DependencySource.GitHubRepo, new GitHubRepoInstaller()},
+                {DependencySource.GitHubRelease, new GitHubReleaseInstaller()},
+                {DependencySource.DirectUrl, new DirectUrlInstaller()}
             };
         }
 
@@ -92,31 +92,6 @@ namespace Puffin.Editor.Environment
             return await installer.InstallFromCacheAsync(dep, destDir, cachePath, ct);
         }
 
-        public async UniTask<bool> InstallAllAsync(IEnumerable<DependencyDefinition> deps, CancellationToken ct = default)
-        {
-            foreach (var dep in deps)
-            {
-                if (!await InstallAsync(dep, ct))
-                    return false;
-            }
-            return true;
-        }
-
-        /// <summary>
-        /// 从 JSON 文件加载依赖配置
-        /// </summary>
-        public static DependencyConfig LoadConfig(string jsonPath)
-        {
-            return DependencyConfig.LoadFromJson(jsonPath);
-        }
-
-        /// <summary>
-        /// 根据 ID 从配置中查找依赖
-        /// </summary>
-        public static DependencyDefinition FindDependency(DependencyConfig config, string id)
-        {
-            return config?.dependencies?.Find(d => d.id == id);
-        }
 
         /// <summary>
         /// 获取缓存文件路径
@@ -144,7 +119,10 @@ namespace Puffin.Editor.Environment
                 if (File.Exists(metaPath)) File.Delete(metaPath);
                 return true;
             }
-            catch { return false; }
+            catch
+            {
+                return false;
+            }
         }
 
         /// <summary>
@@ -154,25 +132,6 @@ namespace Puffin.Editor.Environment
         {
             if (Directory.Exists(CacheDir))
                 Directory.Delete(CacheDir, true);
-        }
-
-        /// <summary>
-        /// 获取模块依赖配置
-        /// </summary>
-        public static DependencyConfig GetModuleConfig(string moduleName)
-        {
-            if (moduleName == "[Core]")
-            {
-                var corePath = Path.Combine(Application.dataPath, "Puffin/Editor/Environment/dependencies.json");
-                return File.Exists(corePath) ? LoadConfig(corePath) : null;
-            }
-
-            var modulesDir = Path.Combine(Application.dataPath, "Puffin/Modules");
-            var moduleDir = Path.Combine(modulesDir, moduleName);
-            if (!Directory.Exists(moduleDir)) return null;
-
-            var files = Directory.GetFiles(moduleDir, "dependencies.json", SearchOption.AllDirectories);
-            return files.Length > 0 ? LoadConfig(files[0]) : null;
         }
     }
 }

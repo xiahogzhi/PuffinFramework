@@ -11,7 +11,6 @@ namespace Puffin.Editor.Environment.UI
     public class InstallWindow : EditorWindow
     {
         private DependencyDefinition[] _deps;
-        private string _moduleName;
         private Action _onComplete;
         private DependencyManager _manager;
 
@@ -24,25 +23,23 @@ namespace Puffin.Editor.Environment.UI
         {
             var window = GetWindow<InstallWindow>(true, "依赖管理", true);
             window._deps = deps;
-            window._moduleName = null;
             window._onComplete = onComplete;
             window.minSize = new Vector2(400, 300);
             window.RefreshStatus();
             window.ShowUtility();
         }
 
-        public static void ShowForModule(string moduleName, Action onComplete = null)
+        public static void ShowForModule(string moduleId, Action onComplete = null)
         {
-            var config = DependencyManager.GetModuleConfig(moduleName);
-            if (config?.dependencies == null || config.dependencies.Count == 0)
+            var deps = ModuleDependencyUI.GetModuleEnvDependencies(moduleId);
+            if (deps == null || deps.Count == 0)
             {
-                EditorUtility.DisplayDialog("提示", $"模块 {moduleName} 没有依赖配置", "确定");
+                EditorUtility.DisplayDialog("提示", $"模块 {moduleId} 没有环境依赖配置", "确定");
                 return;
             }
 
-            var window = GetWindow<InstallWindow>(true, $"{moduleName} 依赖管理", true);
-            window._deps = config.dependencies.ToArray();
-            window._moduleName = moduleName;
+            var window = GetWindow<InstallWindow>(true, $"{moduleId} 依赖管理", true);
+            window._deps = deps.ToArray();
             window._onComplete = onComplete;
             window.minSize = new Vector2(400, 300);
             window.RefreshStatus();

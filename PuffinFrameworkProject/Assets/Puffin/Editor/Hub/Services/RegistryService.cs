@@ -33,27 +33,18 @@ namespace Puffin.Editor.Hub.Services
             foreach (var dir in Directory.GetDirectories(modulesPath))
             {
                 var folderName = Path.GetFileName(dir);
+
+                // 验证是否为有效模块
+                if (!IsValidModule(dir))
+                    continue;
+
                 var moduleJsonPath = Path.Combine(dir, "module.json");
+                var json = File.ReadAllText(moduleJsonPath);
+                var manifest = UnityEngine.JsonUtility.FromJson<HubModuleManifest>(json);
 
-                string moduleId = folderName;
-                string version = null;
-                string displayName = folderName;
-
-                if (File.Exists(moduleJsonPath))
-                {
-                    try
-                    {
-                        var json = File.ReadAllText(moduleJsonPath);
-                        var manifest = UnityEngine.JsonUtility.FromJson<HubModuleManifest>(json);
-                        if (manifest != null)
-                        {
-                            moduleId = manifest.moduleId ?? folderName;
-                            version = manifest.version;
-                            displayName = manifest.displayName ?? moduleId;
-                        }
-                    }
-                    catch { }
-                }
+                var moduleId = manifest?.moduleId ?? folderName;
+                var version = manifest?.version;
+                var displayName = manifest?.displayName ?? moduleId;
 
                 // 从锁定文件获取来源信息
                 var lockInfo = InstalledModulesLock.Instance.GetModule(moduleId);
@@ -73,7 +64,8 @@ namespace Puffin.Editor.Hub.Services
                     SourceRegistryName = sourceRegistry?.name,
                     IsInstalled = true,
                     IsLocal = sourceRegistryId == null,
-                    HasUpdate = false
+                    HasUpdate = false,
+                    Manifest = manifest
                 });
             }
 
@@ -81,15 +73,39 @@ namespace Puffin.Editor.Hub.Services
         }
 
         /// <summary>
+        /// 验证目录是否为有效模块
+        /// </summary>
+        private bool IsValidModule(string moduleDir)
+        {
+            // 1. 必须有 module.json
+            var moduleJsonPath = Path.Combine(moduleDir, "module.json");
+            if (!File.Exists(moduleJsonPath))
+                return false;
+
+            // 2. 必须有 Runtime 或 Editor 目录
+            var hasRuntime = Directory.Exists(Path.Combine(moduleDir, "Runtime"));
+            var hasEditor = Directory.Exists(Path.Combine(moduleDir, "Editor"));
+            if (!hasRuntime && !hasEditor)
+                return false;
+
+            // 3. 必须有程序集定义文件 (.asmdef)
+            var asmdefFiles = Directory.GetFiles(moduleDir, "*.asmdef", SearchOption.AllDirectories);
+            if (asmdefFiles.Length == 0)
+                return false;
+
+            return true;
+        }
+
+        /// <summary>
         /// 获取指定仓库的远程模块列表
         /// </summary>
-        public async UniTask<List<HubModuleInfo>> FetchRegistryModulesAsync(RegistrySource registry, Dictionary<string, HubModuleInfo> installedMap)
+        public async UniTask<List<HubModuleInfo>> FetchRegistryModulesAsync(RegistrySource registry, Dictionary<string, HubModuleInfo> installedMap, bool forceRefresh = false)
         {
             var result = new List<HubModuleInfo>();
 
             try
             {
-                var index = await FetchRegistryIndexAsync(registry);
+                var index = await FetchRegistryIndexAsync(registry, forceRefresh);
                 if (index?.modules == null) return result;
 
                 foreach (var kvp in index.modules)
@@ -115,7 +131,8 @@ namespace Puffin.Editor.Hub.Services
                         HasRemote = true,
                         SourceRegistryId = isInstalled ? registry.id : null,
                         SourceRegistryName = isInstalled ? registry.name : null,
-                        Versions = versionInfo.versions ?? new List<string> { versionInfo.latest }
+                        Versions = versionInfo.versions ?? new List<string> { versionInfo.latest },
+                        UpdatedAt = versionInfo.updatedAt
                     };
 
                     info.HasUpdate = isInstalled &&
@@ -177,8 +194,18 @@ namespace Puffin.Editor.Hub.Services
                 }
             }
 
-            var url = registry.GetRegistryUrl();
-            var json = await FetchJsonAsync(url, registry.authToken);
+            string json;
+            // 强制刷新时使用 GitHub API 绕过 CDN 缓存
+            if (forceRefresh && registry.IsGitHubRepo)
+            {
+                json = await FetchGitHubApiContentAsync(registry.GetRegistryApiUrl(), registry.authToken);
+            }
+            else
+            {
+                var url = registry.GetRegistryUrl();
+                json = await FetchJsonAsync(url, registry.authToken, forceRefresh);
+            }
+
             if (string.IsNullOrEmpty(json))
                 return null;
 
@@ -266,11 +293,14 @@ namespace Puffin.Editor.Hub.Services
             _manifestCache.Clear();
         }
 
-        private async UniTask<string> FetchJsonAsync(string url, string authToken = null)
+        private async UniTask<string> FetchJsonAsync(string url, string authToken = null, bool noCache = false)
         {
-            using var request = UnityWebRequest.Get(url);
+            // 添加时间戳防止缓存
+            var finalUrl = noCache ? $"{url}{(url.Contains("?") ? "&" : "?")}t={DateTime.Now.Ticks}" : url;
+            using var request = UnityWebRequest.Get(finalUrl);
             if (!string.IsNullOrEmpty(authToken))
                 request.SetRequestHeader("Authorization", $"Bearer {authToken}");
+            request.SetRequestHeader("Cache-Control", "no-cache");
 
             await request.SendWebRequest();
 
@@ -280,71 +310,78 @@ namespace Puffin.Editor.Hub.Services
             return request.downloadHandler.text;
         }
 
+        /// <summary>
+        /// 通过 GitHub API 获取文件内容（绕过 CDN 缓存）
+        /// </summary>
+        private async UniTask<string> FetchGitHubApiContentAsync(string apiUrl, string authToken = null)
+        {
+            if (string.IsNullOrEmpty(apiUrl))
+                return null;
+
+            using var request = UnityWebRequest.Get(apiUrl);
+            request.SetRequestHeader("Accept", "application/vnd.github.v3+json");
+            request.SetRequestHeader("User-Agent", "PuffinHub");
+            if (!string.IsNullOrEmpty(authToken))
+                request.SetRequestHeader("Authorization", $"Bearer {authToken}");
+
+            await request.SendWebRequest();
+
+            if (request.result != UnityWebRequest.Result.Success)
+            {
+                Debug.LogWarning($"[Hub] GitHub API 请求失败: {request.error}");
+                return null;
+            }
+
+            // GitHub API 返回 JSON，content 字段是 base64 编码
+            var response = request.downloadHandler.text;
+            var contentMatch = System.Text.RegularExpressions.Regex.Match(response, "\"content\"\\s*:\\s*\"([^\"]+)\"");
+            if (!contentMatch.Success)
+                return null;
+
+            var base64Content = contentMatch.Groups[1].Value.Replace("\\n", "");
+            var bytes = Convert.FromBase64String(base64Content);
+            return System.Text.Encoding.UTF8.GetString(bytes);
+        }
+
         private Dictionary<string, ModuleVersionInfo> ParseModulesDict(string json)
         {
             var result = new Dictionary<string, ModuleVersionInfo>();
 
-            // 简单解析 "modules": { "ModuleId": { "latest": "x.x.x", "versions": [...] } }
+            // 使用正则解析 "modules": { "ModuleId": { "latest": "x.x.x", "versions": [...] } }
             var modulesStart = json.IndexOf("\"modules\"", StringComparison.Ordinal);
             if (modulesStart < 0) return result;
 
             var braceStart = json.IndexOf('{', modulesStart + 9);
             if (braceStart < 0) return result;
 
+            // 找到 modules 对象的结束位置
             var depth = 1;
             var pos = braceStart + 1;
-            var currentKey = "";
-            var inString = false;
-            var stringStart = -1;
-
             while (pos < json.Length && depth > 0)
             {
-                var c = json[pos];
-
-                if (c == '"' && (pos == 0 || json[pos - 1] != '\\'))
-                {
-                    if (!inString)
-                    {
-                        inString = true;
-                        stringStart = pos + 1;
-                    }
-                    else
-                    {
-                        inString = false;
-                        if (depth == 1 && string.IsNullOrEmpty(currentKey))
-                            currentKey = json.Substring(stringStart, pos - stringStart);
-                    }
-                }
-                else if (!inString)
-                {
-                    if (c == '{')
-                    {
-                        if (depth == 1 && !string.IsNullOrEmpty(currentKey))
-                        {
-                            var objStart = pos;
-                            var objDepth = 1;
-                            pos++;
-                            while (pos < json.Length && objDepth > 0)
-                            {
-                                if (json[pos] == '{') objDepth++;
-                                else if (json[pos] == '}') objDepth--;
-                                pos++;
-                            }
-                            var objJson = json.Substring(objStart, pos - objStart);
-                            var versionInfo = JsonUtility.FromJson<ModuleVersionInfo>(objJson);
-                            if (versionInfo != null)
-                                result[currentKey] = versionInfo;
-                            currentKey = "";
-                            continue;
-                        }
-                        depth++;
-                    }
-                    else if (c == '}')
-                    {
-                        depth--;
-                    }
-                }
+                if (json[pos] == '{') depth++;
+                else if (json[pos] == '}') depth--;
                 pos++;
+            }
+            var modulesJson = json.Substring(braceStart, pos - braceStart);
+
+            // 用正则匹配每个模块
+            var modulePattern = new System.Text.RegularExpressions.Regex(
+                "\"([^\"]+)\"\\s*:\\s*\\{\\s*\"latest\"\\s*:\\s*\"([^\"]+)\"\\s*,\\s*\"versions\"\\s*:\\s*\\[([^\\]]+)\\](?:\\s*,\\s*\"updatedAt\"\\s*:\\s*\"([^\"]+)\")?");
+
+            foreach (System.Text.RegularExpressions.Match m in modulePattern.Matches(modulesJson))
+            {
+                var moduleId = m.Groups[1].Value;
+                var latest = m.Groups[2].Value;
+                var versionsStr = m.Groups[3].Value;
+                var updatedAt = m.Groups[4].Success ? m.Groups[4].Value : null;
+
+                var versions = new List<string>();
+                var versionPattern = new System.Text.RegularExpressions.Regex("\"([^\"]+)\"");
+                foreach (System.Text.RegularExpressions.Match v in versionPattern.Matches(versionsStr))
+                    versions.Add(v.Groups[1].Value);
+
+                result[moduleId] = new ModuleVersionInfo { latest = latest, versions = versions, updatedAt = updatedAt };
             }
 
             return result;

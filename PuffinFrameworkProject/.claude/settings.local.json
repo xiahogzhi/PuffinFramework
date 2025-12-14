@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(unzip:*)"
+      "Bash(unzip:*)",
+      "Bash(dir:*)"
     ]
   }
 }

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Puffin.Editor.Environment.Core;
+using Puffin.Editor.Hub.Data;
 using UnityEditor;
 using UnityEngine;
 
@@ -12,9 +13,8 @@ namespace Puffin.Editor.Environment.UI
     public class EnvironmentManagerWindow : EditorWindow
     {
         private static string ModulesDir => Path.Combine(Application.dataPath, "Puffin/Modules");
-        private static string CoreDepsPath => Path.Combine(Application.dataPath, "Puffin/Editor/Environment/dependencies.json");
 
-        private Dictionary<string, DependencyConfig> _moduleConfigs;
+        private Dictionary<string, List<EnvDepInfo>> _moduleEnvDeps;
         private Dictionary<string, bool> _moduleFoldout;
         private Dictionary<string, bool> _installedStatus;
         private DependencyManager _manager;
@@ -22,6 +22,12 @@ namespace Puffin.Editor.Environment.UI
         private string _filter;
         private int _animFrame;
         private double _lastAnimTime;
+
+        private class EnvDepInfo
+        {
+            public DependencyDefinition Definition;
+            public string ModuleId;
+        }
 
         [MenuItem("Puffin Framework/Environment Manager")]
         public static void ShowWindow() => GetWindow<EnvironmentManagerWindow>("环境管理器");
@@ -66,54 +72,89 @@ namespace Puffin.Editor.Environment.UI
 
         private bool HasActiveDownloads()
         {
-            foreach (var kvp in _moduleConfigs)
-                foreach (var dep in kvp.Value.dependencies)
-                    if (DownloadService.IsDownloading(dep.id))
+            if (_moduleEnvDeps == null) return false;
+            foreach (var kvp in _moduleEnvDeps)
+                foreach (var info in kvp.Value)
+                    if (DownloadService.IsDownloading(info.Definition.id))
                         return true;
             return false;
         }
 
         private void ScanModules()
         {
-            _moduleConfigs = new Dictionary<string, DependencyConfig>();
+            _moduleEnvDeps = new Dictionary<string, List<EnvDepInfo>>();
             _installedStatus.Clear();
 
-            if (File.Exists(CoreDepsPath))
-            {
-                var coreConfig = DependencyManager.LoadConfig(CoreDepsPath);
-                if (coreConfig?.dependencies != null)
-                {
-                    _moduleConfigs["[Core]"] = coreConfig;
-                    if (!_moduleFoldout.ContainsKey("[Core]")) _moduleFoldout["[Core]"] = true;
-                }
-            }
+            if (!Directory.Exists(ModulesDir)) return;
 
-            if (Directory.Exists(ModulesDir))
+            foreach (var moduleDir in Directory.GetDirectories(ModulesDir))
             {
-                foreach (var moduleDir in Directory.GetDirectories(ModulesDir))
+                var moduleId = Path.GetFileName(moduleDir);
+                var manifestPath = Path.Combine(moduleDir, "module.json");
+                if (!File.Exists(manifestPath)) continue;
+
+                try
                 {
-                    var moduleName = Path.GetFileName(moduleDir);
-                    var files = Directory.GetFiles(moduleDir, "dependencies.json", SearchOption.AllDirectories);
-                    if (files.Length > 0)
+                    var json = File.ReadAllText(manifestPath);
+                    var manifest = JsonUtility.FromJson<HubModuleManifest>(json);
+                    if (manifest?.envDependencies == null || manifest.envDependencies.Length == 0) continue;
+
+                    var deps = new List<EnvDepInfo>();
+                    foreach (var envDep in manifest.envDependencies)
                     {
-                        var config = DependencyManager.LoadConfig(files[0]);
-                        if (config?.dependencies != null)
+                        deps.Add(new EnvDepInfo
                         {
-                            _moduleConfigs[moduleName] = config;
-                            if (!_moduleFoldout.ContainsKey(moduleName)) _moduleFoldout[moduleName] = true;
-                        }
+                            Definition = ConvertToDepDefinition(envDep),
+                            ModuleId = moduleId
+                        });
                     }
+
+                    _moduleEnvDeps[moduleId] = deps;
+                    if (!_moduleFoldout.ContainsKey(moduleId)) _moduleFoldout[moduleId] = true;
                 }
+                catch { }
             }
 
             RefreshInstalledStatus();
         }
 
+        private DependencyDefinition ConvertToDepDefinition(EnvironmentDependency envDep)
+        {
+            return new DependencyDefinition
+            {
+                id = envDep.id,
+                displayName = envDep.id,
+                source = (DependencySource)envDep.source,
+                type = (DependencyType)envDep.type,
+                url = envDep.url,
+                version = envDep.version,
+                installDir = envDep.installDir,
+                extractPath = envDep.extractPath,
+                requiredFiles = envDep.requiredFiles,
+                targetFrameworks = envDep.targetFrameworks,
+                requirement = envDep.optional ? DependencyRequirement.Optional : DependencyRequirement.Required
+            };
+        }
+
         private void RefreshInstalledStatus()
         {
-            foreach (var kvp in _moduleConfigs)
-                foreach (var dep in kvp.Value.dependencies)
-                    _installedStatus[dep.id] = _manager.IsInstalled(dep);
+            foreach (var kvp in _moduleEnvDeps)
+                foreach (var info in kvp.Value)
+                    _installedStatus[info.Definition.id] = _manager.IsInstalled(info.Definition);
+        }
+
+        /// <summary>
+        /// 获取依赖指定环境的所有模块
+        /// </summary>
+        public List<string> GetModulesRequiringEnv(string envId)
+        {
+            var result = new List<string>();
+            foreach (var kvp in _moduleEnvDeps)
+            {
+                if (kvp.Value.Any(info => info.Definition.id == envId))
+                    result.Add(kvp.Key);
+            }
+            return result;
         }
 
         private void OnGUI()
@@ -133,68 +174,50 @@ namespace Puffin.Editor.Environment.UI
                 _filter = null;
             EditorGUILayout.EndHorizontal();
 
-            if (_moduleConfigs == null || _moduleConfigs.Count == 0)
+            if (_moduleEnvDeps == null || _moduleEnvDeps.Count == 0)
             {
-                EditorGUILayout.HelpBox("未找到任何模块依赖配置", MessageType.Info);
+                EditorGUILayout.HelpBox("未找到任何模块环境依赖配置\n\n环境依赖现在在模块的 module.json 中配置", MessageType.Info);
                 return;
             }
 
             _scrollPos = EditorGUILayout.BeginScrollView(_scrollPos);
 
-            var moduleIndex = 0;
-            foreach (var kvp in _moduleConfigs)
+            foreach (var kvp in _moduleEnvDeps)
             {
                 if (!string.IsNullOrEmpty(_filter) && !kvp.Key.Contains(_filter, StringComparison.OrdinalIgnoreCase))
                     continue;
-                DrawModuleSection(kvp.Key, kvp.Value, moduleIndex++);
+                DrawModuleSection(kvp.Key, kvp.Value);
             }
             EditorGUILayout.Space(5);
 
             EditorGUILayout.EndScrollView();
         }
 
-        private void DrawModuleSection(string moduleName, DependencyConfig config, int moduleIndex)
+        private void DrawModuleSection(string moduleId, List<EnvDepInfo> deps)
         {
-            var foldout = _moduleFoldout.TryGetValue(moduleName, out var f) && f;
-            var installedCount = config.dependencies.Count(d => _installedStatus.TryGetValue(d.id, out var v) && v);
-            var totalCount = config.dependencies.Count;
+            var foldout = _moduleFoldout.TryGetValue(moduleId, out var f) && f;
+            var installedCount = deps.Count(d => _installedStatus.TryGetValue(d.Definition.id, out var v) && v);
+            var totalCount = deps.Count;
 
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            foldout = EditorGUILayout.Foldout(foldout, $"{moduleName} ({installedCount}/{totalCount})", true);
-            _moduleFoldout[moduleName] = foldout;
+            foldout = EditorGUILayout.Foldout(foldout, $"{moduleId} ({installedCount}/{totalCount})", true);
+            _moduleFoldout[moduleId] = foldout;
 
             if (foldout)
             {
-                // 必须依赖
-                var required = config.dependencies.Where(d => d.requirement == DependencyRequirement.Required).ToList();
-                var optional = config.dependencies.Where(d => d.requirement != DependencyRequirement.Required).ToList();
-
-                var rowIndex = 0;
-                foreach (var dep in required)
-                    DrawDepItem(dep, rowIndex++);
-
-                // 分割线（如果两边都有内容）
-                if (required.Count > 0 && optional.Count > 0)
-                {
-                    EditorGUILayout.Space(2);
-                    var lineRect = EditorGUILayout.GetControlRect(false, 1);
-                    EditorGUI.DrawRect(lineRect, new Color(0.5f, 0.5f, 0.5f, 0.5f));
-                    EditorGUILayout.Space(2);
-                }
-
-                // 可选依赖
-                foreach (var dep in optional)
-                    DrawDepItem(dep, rowIndex++);
+                foreach (var info in deps)
+                    DrawDepItem(info.Definition);
             }
             EditorGUILayout.EndVertical();
-        }
+        } 
 
-        private void DrawDepItem(DependencyDefinition dep, int rowIndex = 0)
+        private void DrawDepItem(DependencyDefinition dep)
         {
             var installed = _installedStatus.TryGetValue(dep.id, out var v) && v;
             var task = DownloadService.GetTask(dep.id);
             var hasCache = !installed && DownloadService.HasCache(dep);
-            var reqLabel = dep.requirement == DependencyRequirement.Required ? "[必须]" : "[可选]";
+            var isRequired = dep.requirement == DependencyRequirement.Required;
+            var reqLabel = isRequired ? "[必须]" : "[可选]";
 
             EditorGUILayout.BeginHorizontal();
 
@@ -204,7 +227,7 @@ namespace Puffin.Editor.Environment.UI
             if (installed)
             {
                 icon = "✓";
-                color = new Color(0.2f, 0.9f, 0.3f); // 绿色
+                color = new Color(0.2f, 0.9f, 0.3f);
             }
             else if (task != null)
             {
@@ -213,20 +236,20 @@ namespace Puffin.Editor.Environment.UI
                     case TaskState.Downloading:
                         var anim = new[] { "●", "◐", "◑", "◒" };
                         icon = anim[_animFrame % 4];
-                        color = new Color(1f, 0.7f, 0.2f); // 橙色
+                        color = new Color(1f, 0.7f, 0.2f);
                         break;
                     case TaskState.Downloaded:
                         icon = "◉";
-                        color = new Color(0.4f, 0.7f, 1f); // 蓝色
+                        color = new Color(0.4f, 0.7f, 1f);
                         break;
                     case TaskState.Installing:
                         var installAnim = new[] { "◐", "◑", "◒", "◓" };
                         icon = installAnim[_animFrame % 4];
-                        color = new Color(0.5f, 0.9f, 0.5f); // 浅绿
+                        color = new Color(0.5f, 0.9f, 0.5f);
                         break;
                     case TaskState.Failed:
                         icon = "✗";
-                        color = new Color(1f, 0.3f, 0.3f); // 红色
+                        color = new Color(1f, 0.3f, 0.3f);
                         break;
                     default:
                         icon = hasCache ? "◉" : "○";
@@ -257,20 +280,35 @@ namespace Puffin.Editor.Environment.UI
             var oldBg = GUI.backgroundColor;
             if (task != null && task.IsRunning)
             {
-                GUI.backgroundColor = new Color(1f, 0.7f, 0.2f); // 橙色
+                GUI.backgroundColor = new Color(1f, 0.7f, 0.2f);
                 if (GUILayout.Button("取消", GUILayout.Width(40)))
                     DownloadService.CancelDownload(dep.id);
             }
             else if (installed)
             {
-                GUI.backgroundColor = new Color(1f, 0.5f, 0.5f); // 浅红
-                if (GUILayout.Button("卸载", GUILayout.Width(40)))
+                // 检查是否有模块依赖此环境（仅必须依赖不可卸载）
+                var dependentModules = GetModulesRequiringEnv(dep.id);
+                var moduleExists = dependentModules.Any(m => Directory.Exists(Path.Combine(ModulesDir, m)));
+                var canUninstall = !isRequired || !moduleExists;
+
+                if (!canUninstall)
                 {
-                    if (EditorUtility.DisplayDialog("确认", $"确定要卸载 {dep.displayName ?? dep.id} 吗？", "确定", "取消"))
+                    GUI.backgroundColor = Color.gray;
+                    GUI.enabled = false;
+                    GUILayout.Button("必需", GUILayout.Width(40));
+                    GUI.enabled = true;
+                }
+                else
+                {
+                    GUI.backgroundColor = new Color(1f, 0.5f, 0.5f);
+                    if (GUILayout.Button("卸载", GUILayout.Width(40)))
                     {
-                        _manager.Uninstall(dep);
-                        AssetDatabase.Refresh();
-                        RefreshInstalledStatus();
+                        if (EditorUtility.DisplayDialog("确认", $"确定要卸载 {dep.displayName ?? dep.id} 吗？", "确定", "取消"))
+                        {
+                            _manager.Uninstall(dep);
+                            AssetDatabase.Refresh();
+                            RefreshInstalledStatus();
+                        }
                     }
                 }
             }
@@ -278,7 +316,7 @@ namespace Puffin.Editor.Environment.UI
             {
                 if (hasCache)
                 {
-                    GUI.backgroundColor = new Color(0.5f, 1f, 0.5f); // 浅绿
+                    GUI.backgroundColor = new Color(0.5f, 1f, 0.5f);
                     if (GUILayout.Button("安装", GUILayout.Width(40)))
                         DownloadService.StartInstallFromCache(dep);
                     GUI.backgroundColor = oldBg;
@@ -298,7 +336,7 @@ namespace Puffin.Editor.Environment.UI
                 }
                 else
                 {
-                    GUI.backgroundColor = new Color(0.5f, 0.8f, 1f); // 浅蓝
+                    GUI.backgroundColor = new Color(0.5f, 0.8f, 1f);
                     if (GUILayout.Button("下载", GUILayout.Width(40)))
                         DownloadService.StartDownload(dep);
                 }
@@ -307,7 +345,7 @@ namespace Puffin.Editor.Environment.UI
 
             EditorGUILayout.EndHorizontal();
 
-            // 进度条在条目下方（仅下载中显示）
+            // 进度条
             if (task?.State == TaskState.Downloading)
             {
                 var progRect = EditorGUILayout.GetControlRect(false, 16);

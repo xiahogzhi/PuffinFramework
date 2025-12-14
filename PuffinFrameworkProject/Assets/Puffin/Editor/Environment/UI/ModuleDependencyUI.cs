@@ -1,5 +1,8 @@
 #if UNITY_EDITOR
+using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using Puffin.Editor.Hub.Data;
 using UnityEditor;
 using UnityEngine;
 
@@ -13,19 +16,17 @@ namespace Puffin.Editor.Environment.UI
         /// <summary>
         /// 绘制依赖检测界面，返回是否所有必须依赖已安装
         /// </summary>
-        /// <param name="moduleName">模块名称</param>
-        /// <param name="manager">依赖管理器实例</param>
-        /// <returns>true 表示所有必须依赖已安装</returns>
-        public static bool DrawDependencyCheck(string moduleName, DependencyManager manager)
+        public static bool DrawDependencyCheck(string moduleId, DependencyManager manager)
         {
-            var config = DependencyManager.GetModuleConfig(moduleName);
-            if (config?.dependencies == null) return true;
+            var envDeps = GetModuleEnvDependencies(moduleId);
+            if (envDeps == null || envDeps.Count == 0) return true;
 
-            var requiredDeps = config.dependencies.Where(d => d.requirement == DependencyRequirement.Required).ToArray();
-            if (requiredDeps.Length == 0) return true;
+            // 只检查必须依赖
+            var requiredDeps = envDeps.Where(d => d.requirement == DependencyRequirement.Required).ToList();
+            if (requiredDeps.Count == 0) return true;
 
-            var missingDeps = requiredDeps.Where(d => !manager.IsInstalled(d)).ToArray();
-            if (missingDeps.Length == 0) return true;
+            var missingDeps = requiredDeps.Where(d => !manager.IsInstalled(d)).ToList();
+            if (missingDeps.Count == 0) return true;
 
             // 绘制安装界面
             EditorGUILayout.Space(20);
@@ -49,8 +50,7 @@ namespace Puffin.Editor.Environment.UI
             GUILayout.FlexibleSpace();
             if (GUILayout.Button("安装环境", GUILayout.Width(200), GUILayout.Height(40)))
             {
-                InstallWindow.Show(missingDeps, () => {
-                    // 刷新当前窗口
+                InstallWindow.Show(missingDeps.ToArray(), () => {
                     if (EditorWindow.focusedWindow != null)
                         EditorWindow.focusedWindow.Repaint();
                 });
@@ -60,6 +60,54 @@ namespace Puffin.Editor.Environment.UI
 
             GUILayout.FlexibleSpace();
             return false;
+        }
+
+        /// <summary>
+        /// 从 module.json 获取模块的环境依赖
+        /// </summary>
+        public static List<DependencyDefinition> GetModuleEnvDependencies(string moduleId)
+        {
+            var manifestPath = Path.Combine(Application.dataPath, $"Puffin/Modules/{moduleId}/module.json");
+            if (!File.Exists(manifestPath)) return null;
+
+            try
+            {
+                var json = File.ReadAllText(manifestPath);
+                var manifest = JsonUtility.FromJson<HubModuleManifest>(json);
+                if (manifest?.envDependencies == null) return null;
+
+                return manifest.envDependencies.Select(ConvertToDepDefinition).ToList();
+            }
+            catch { return null; }
+        }
+
+        /// <summary>
+        /// 根据 ID 查找环境依赖
+        /// </summary>
+        public static DependencyDefinition FindEnvDependency(string moduleId, string depId)
+        {
+            var deps = GetModuleEnvDependencies(moduleId);
+            return deps?.Find(d => d.id == depId);
+        }
+
+        private static DependencyDefinition ConvertToDepDefinition(EnvironmentDependency envDep)
+        {
+            return new DependencyDefinition
+            {
+                id = envDep.id,
+                displayName = envDep.id,
+                source = (DependencySource)envDep.source,
+                type = (DependencyType)envDep.type,
+                url = envDep.url,
+                version = envDep.version,
+                installDir = envDep.installDir,
+                extractPath = envDep.extractPath,
+                requiredFiles = envDep.requiredFiles,
+                targetFrameworks = envDep.targetFrameworks,
+                dllReferences = envDep.dllReferences,
+                asmdefReferences = envDep.asmdefReferences,
+                requirement = envDep.optional ? DependencyRequirement.Optional : DependencyRequirement.Required
+            };
         }
 
         private static void DrawStatusLabel(string label, bool ok)

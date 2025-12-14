@@ -15,10 +15,9 @@ MonoBehaviour:
   registries:
   - id: official
     name: Puffin Official
-    url: puffin-framework/puffin-modules
+    url: xiahogzhi/puffin-modules
     branch: main
     isOfficial: 1
     enabled: 1
-    authToken: 
   cacheExpireHours: 24
   useSystemProxy: 1

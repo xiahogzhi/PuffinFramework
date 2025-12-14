@@ -35,6 +35,10 @@ namespace Puffin.Editor.Hub.Data
         [Tooltip("使用系统代理")]
         public bool useSystemProxy = true;
 
+        [Header("下载设置")]
+        [Tooltip("使用 GitHub API 下载（绕过 CDN 缓存，但有速率限制）")]
+        public bool useGitHubApiDownload = false;
+
         private static HubSettings _instance;
 
         public static HubSettings Instance
@@ -100,6 +104,31 @@ namespace Puffin.Editor.Hub.Data
         public List<RegistrySource> GetEnabledRegistries()
         {
             return registries.FindAll(r => r.enabled);
+        }
+
+        /// <summary>
+        /// 是否有任何仓库配置了 token（开发者模式）
+        /// </summary>
+        public bool HasAnyToken()
+        {
+            return registries.Exists(r => r.enabled && !string.IsNullOrEmpty(r.authToken));
+        }
+
+        /// <summary>
+        /// 获取有 token 的仓库源
+        /// </summary>
+        public List<RegistrySource> GetRegistriesWithToken()
+        {
+            return registries.FindAll(r => r.enabled && !string.IsNullOrEmpty(r.authToken));
+        }
+
+        /// <summary>
+        /// 检查指定仓库是否有 token
+        /// </summary>
+        public bool HasToken(string registryId)
+        {
+            var registry = registries.Find(r => r.id == registryId);
+            return registry != null && !string.IsNullOrEmpty(registry.authToken);
         }
     }
 }

@@ -84,7 +84,45 @@ namespace Puffin.Editor.Hub.Services
             if (asmdefFiles.Length == 0)
                 result.Warnings.Add("缺少 .asmdef 文件");
 
+            // 检查依赖是否都已上传到远程
+            if (result.Manifest != null)
+            {
+                var deps = result.Manifest.GetAllDependencies();
+                var localDeps = new List<string>();
+                foreach (var dep in deps)
+                {
+                    if (dep.optional) continue; // 可选依赖不强制检查
+                    var isRemote = IsModuleInRemoteRegistry(dep.moduleId);
+                    if (!isRemote)
+                        localDeps.Add(dep.moduleId);
+                }
+                if (localDeps.Count > 0)
+                {
+                    result.Errors.Add($"以下依赖模块尚未上传到远程仓库，请先上传它们: {string.Join(", ", localDeps)}");
+                    result.IsValid = false;
+                }
+            }
+
             return result;
+        }
+
+        /// <summary>
+        /// 检查模块是否存在于任何远程仓库
+        /// </summary>
+        private bool IsModuleInRemoteRegistry(string moduleId)
+        {
+            // 检查锁定文件中是否有远程来源
+            var lockInfo = InstalledModulesLock.Instance.GetModule(moduleId);
+            if (lockInfo != null && !string.IsNullOrEmpty(lockInfo.registryId))
+                return true;
+
+            // 检查本地目录是否存在（本地模块）
+            var localPath = Path.Combine(Application.dataPath, $"Puffin/Modules/{moduleId}");
+            if (!Directory.Exists(localPath))
+                return false; // 模块不存在
+
+            // 存在但没有远程来源 = 本地模块
+            return false;
         }
 
         /// <summary>
@@ -163,7 +201,7 @@ namespace Puffin.Editor.Hub.Services
 - Puffin Framework {manifest.puffinVersion ?? "1.0.0+"}
 
 ## 依赖
-{(manifest.dependencies?.Length > 0 ? string.Join("\n", Array.ConvertAll(manifest.dependencies, d => $"- {d.moduleId} {d.versionRange}")) : "无")}
+{(manifest.dependencies?.Count > 0 ? string.Join("\n", manifest.dependencies.Select(d => $"- {d}")) : "无")}
 ";
         }
 
@@ -423,14 +461,15 @@ namespace Puffin.Editor.Hub.Services
                             var existingModulesJson = existingContent.Substring(braceStart, pos - braceStart);
 
                             // 解析每个模块
-                            var modulePattern = new System.Text.RegularExpressions.Regex("\"([^\"]+)\"\\s*:\\s*\\{\\s*\"latest\"\\s*:\\s*\"([^\"]+)\"\\s*,\\s*\"versions\"\\s*:\\s*\\[([^\\]]+)\\]");
+                            var modulePattern = new System.Text.RegularExpressions.Regex("\"([^\"]+)\"\\s*:\\s*\\{\\s*\"latest\"\\s*:\\s*\"([^\"]+)\"\\s*,\\s*\"versions\"\\s*:\\s*\\[([^\\]]+)\\](?:\\s*,\\s*\"updatedAt\"\\s*:\\s*\"([^\"]+)\")?");
                             foreach (System.Text.RegularExpressions.Match m in modulePattern.Matches(existingModulesJson))
                             {
                                 var entry = new RegistryModuleEntry
                                 {
                                     id = m.Groups[1].Value,
                                     latest = m.Groups[2].Value,
-                                    versions = new List<string>()
+                                    versions = new List<string>(),
+                                    updatedAt = m.Groups[4].Success ? m.Groups[4].Value : null
                                 };
                                 var versionsStr = m.Groups[3].Value;
                                 var versionPattern = new System.Text.RegularExpressions.Regex("\"([^\"]+)\"");
@@ -448,12 +487,14 @@ namespace Puffin.Editor.Hub.Services
             }
 
             // 添加/更新模块
+            var now = DateTime.UtcNow.ToString("o");
             var existing = registry.modules.Find(m => m.id == moduleId);
             if (existing != null)
             {
                 if (!existing.versions.Contains(version))
                     existing.versions.Add(version);
                 existing.latest = GetLatestVersion(existing.versions);
+                existing.updatedAt = now;
             }
             else
             {
@@ -461,14 +502,17 @@ namespace Puffin.Editor.Hub.Services
                 {
                     id = moduleId,
                     latest = version,
-                    versions = new List<string> { version }
+                    versions = new List<string> { version },
+                    updatedAt = now
                 });
             }
 
             // 生成 JSON（手动构建以支持 modules 字典格式）
             var modulesJson = string.Join(",\n    ", registry.modules.Select(m =>
-                $"\"{m.id}\": {{ \"latest\": \"{m.latest}\", \"versions\": [{string.Join(", ", m.versions.Select(v => $"\"{v}\""))}] }}"
-            ));
+            {
+                var updatedPart = !string.IsNullOrEmpty(m.updatedAt) ? $", \"updatedAt\": \"{m.updatedAt}\"" : "";
+                return $"\"{m.id}\": {{ \"latest\": \"{m.latest}\", \"versions\": [{string.Join(", ", m.versions.Select(v => $"\"{v}\""))}]{updatedPart} }}";
+            }));
             var newContent = $"{{\n  \"name\": \"{registry.name}\",\n  \"version\": \"{registry.version}\",\n  \"modules\": {{\n    {modulesJson}\n  }}\n}}";
 
             // 上传
@@ -488,6 +532,160 @@ namespace Puffin.Editor.Hub.Services
             }).FirstOrDefault() ?? versions.LastOrDefault();
         }
 
+        /// <summary>
+        /// 删除远程模块版本
+        /// </summary>
+        public async UniTask<bool> DeleteVersionAsync(RegistrySource registry, string moduleId, string version, Action<string> onStatus = null)
+        {
+            if (string.IsNullOrEmpty(registry.authToken))
+            {
+                Debug.LogError("[Hub] 需要配置 GitHub Token 才能删除");
+                return false;
+            }
+
+            var url = registry.url.Trim().TrimEnd('/');
+            if (url.StartsWith("https://github.com/")) url = url.Substring("https://github.com/".Length);
+            if (url.StartsWith("github.com/")) url = url.Substring("github.com/".Length);
+            var parts = url.Split('/');
+            if (parts.Length < 2) return false;
+            var owner = parts[0];
+            var repo = parts[1];
+
+            try
+            {
+                // 1. 删除版本目录下的文件
+                onStatus?.Invoke($"正在删除 {moduleId}@{version}...");
+                var basePath = $"modules/{moduleId}/{version}";
+
+                // 获取目录内容
+                var filesUrl = $"https://api.github.com/repos/{owner}/{repo}/contents/{basePath}?ref={registry.branch}";
+                var filesJson = await FetchGitHubApiAsync(filesUrl, registry.authToken);
+                if (!string.IsNullOrEmpty(filesJson))
+                {
+                    // 解析文件列表并删除
+                    var filePattern = new System.Text.RegularExpressions.Regex("\"path\"\\s*:\\s*\"([^\"]+)\"[^}]*\"sha\"\\s*:\\s*\"([^\"]+)\"");
+                    foreach (System.Text.RegularExpressions.Match m in filePattern.Matches(filesJson))
+                    {
+                        var filePath = m.Groups[1].Value;
+                        var sha = m.Groups[2].Value;
+                        await DeleteFileAsync(owner, repo, registry.branch, filePath, sha, registry.authToken);
+                    }
+                }
+
+                // 2. 更新 registry.json
+                onStatus?.Invoke("正在更新 registry.json...");
+                await RemoveVersionFromRegistryAsync(owner, repo, registry.branch, moduleId, version, registry.authToken);
+
+                onStatus?.Invoke("删除完成!");
+                return true;
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[Hub] 删除失败: {e.Message}");
+                return false;
+            }
+        }
+
+        private async UniTask<string> FetchGitHubApiAsync(string url, string token)
+        {
+            using var request = UnityEngine.Networking.UnityWebRequest.Get(url);
+            request.SetRequestHeader("Authorization", $"Bearer {token}");
+            request.SetRequestHeader("User-Agent", "PuffinHub");
+            request.SetRequestHeader("Accept", "application/vnd.github+json");
+            await request.SendWebRequest();
+            return request.result == UnityEngine.Networking.UnityWebRequest.Result.Success ? request.downloadHandler.text : null;
+        }
+
+        private async UniTask<bool> DeleteFileAsync(string owner, string repo, string branch, string path, string sha, string token)
+        {
+            var url = $"https://api.github.com/repos/{owner}/{repo}/contents/{path}";
+            var body = $"{{\"message\":\"Delete {System.IO.Path.GetFileName(path)}\",\"sha\":\"{sha}\",\"branch\":\"{branch}\"}}";
+            var bodyBytes = System.Text.Encoding.UTF8.GetBytes(body);
+
+            var request = new UnityEngine.Networking.UnityWebRequest(url, "DELETE");
+            request.uploadHandler = new UnityEngine.Networking.UploadHandlerRaw(bodyBytes);
+            request.downloadHandler = new UnityEngine.Networking.DownloadHandlerBuffer();
+            request.SetRequestHeader("Authorization", $"Bearer {token}");
+            request.SetRequestHeader("User-Agent", "PuffinHub");
+            request.SetRequestHeader("Accept", "application/vnd.github+json");
+            request.SetRequestHeader("Content-Type", "application/json");
+
+            await request.SendWebRequest();
+            var success = request.responseCode == 200;
+            request.Dispose();
+            return success;
+        }
+
+        private async UniTask<bool> RemoveVersionFromRegistryAsync(string owner, string repo, string branch, string moduleId, string version, string token)
+        {
+            var url = $"https://api.github.com/repos/{owner}/{repo}/contents/registry.json?ref={branch}";
+            var response = await FetchGitHubApiAsync(url, token);
+            if (string.IsNullOrEmpty(response)) return false;
+
+            // 提取 sha 和 content
+            var shaMatch = System.Text.RegularExpressions.Regex.Match(response, "\"sha\"\\s*:\\s*\"([^\"]+)\"");
+            var contentMatch = System.Text.RegularExpressions.Regex.Match(response, "\"content\"\\s*:\\s*\"([^\"]+)\"");
+            if (!shaMatch.Success || !contentMatch.Success) return false;
+
+            var sha = shaMatch.Groups[1].Value;
+            var base64 = contentMatch.Groups[1].Value.Replace("\\n", "");
+            var existingContent = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(base64));
+
+            // 解析并修改
+            var registry = new RegistryJson { name = "Puffin Modules", version = "1.0.0", modules = new List<RegistryModuleEntry>() };
+            ParseRegistryJson(existingContent, registry);
+
+            if (registry.modules.Count == 0)
+            {
+                Debug.LogWarning($"[Hub] 解析 registry.json 失败，无法删除版本");
+                return false;
+            }
+
+            var entry = registry.modules.Find(m => m.id == moduleId);
+            if (entry != null)
+            {
+                entry.versions.Remove(version);
+                if (entry.versions.Count == 0)
+                    registry.modules.Remove(entry);
+                else
+                    entry.latest = GetLatestVersion(entry.versions);
+            }
+
+            // 生成新 JSON
+            var modulesJson = string.Join(",\n    ", registry.modules.Select(m =>
+            {
+                var updatedPart = !string.IsNullOrEmpty(m.updatedAt) ? $", \"updatedAt\": \"{m.updatedAt}\"" : "";
+                return $"\"{m.id}\": {{ \"latest\": \"{m.latest}\", \"versions\": [{string.Join(", ", m.versions.Select(v => $"\"{v}\""))}]{updatedPart} }}";
+            }));
+            var newContent = $"{{\n  \"name\": \"{registry.name}\",\n  \"version\": \"{registry.version}\",\n  \"modules\": {{\n    {modulesJson}\n  }}\n}}";
+
+            var contentBytes = System.Text.Encoding.UTF8.GetBytes(newContent);
+            return await UploadFileAsync(owner, repo, branch, "registry.json", contentBytes, token);
+        }
+
+        private void ParseRegistryJson(string content, RegistryJson registry)
+        {
+            var nameMatch = System.Text.RegularExpressions.Regex.Match(content, "\"name\"\\s*:\\s*\"([^\"]+)\"");
+            if (nameMatch.Success) registry.name = nameMatch.Groups[1].Value;
+
+            var modulePattern = new System.Text.RegularExpressions.Regex(
+                "\"([^\"]+)\"\\s*:\\s*\\{\\s*\"latest\"\\s*:\\s*\"([^\"]+)\"\\s*,\\s*\"versions\"\\s*:\\s*\\[([^\\]]+)\\](?:\\s*,\\s*\"updatedAt\"\\s*:\\s*\"([^\"]+)\")?");
+            foreach (System.Text.RegularExpressions.Match m in modulePattern.Matches(content))
+            {
+                var entry = new RegistryModuleEntry
+                {
+                    id = m.Groups[1].Value,
+                    latest = m.Groups[2].Value,
+                    versions = new List<string>(),
+                    updatedAt = m.Groups[4].Success ? m.Groups[4].Value : null
+                };
+                var versionPattern = new System.Text.RegularExpressions.Regex("\"([^\"]+)\"");
+                foreach (System.Text.RegularExpressions.Match v in versionPattern.Matches(m.Groups[3].Value))
+                    entry.versions.Add(v.Groups[1].Value);
+                registry.modules.Add(entry);
+            }
+        }
+
         [Serializable]
         private class RegistryJson
         {
@@ -502,6 +700,7 @@ namespace Puffin.Editor.Hub.Services
             public string id;
             public string latest;
             public List<string> versions;
+            public string updatedAt;  // 最后更新时间
         }
 
         private string ComputeChecksum(string filePath)

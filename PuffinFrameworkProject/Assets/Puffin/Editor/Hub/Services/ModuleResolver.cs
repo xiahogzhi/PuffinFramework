@@ -73,7 +73,8 @@ namespace Puffin.Editor.Hub.Services
                 var registry = HubSettings.Instance.registries.Find(r => r.id == rid);
                 if (registry == null)
                 {
-                    result.Warnings.Add($"找不到仓库: {rid}");
+                    result.Conflicts.Add($"找不到仓库: {rid}");
+                    result.Success = false;
                     continue;
                 }
 
@@ -106,36 +107,49 @@ namespace Puffin.Editor.Hub.Services
                     Manifest = manifest
                 };
 
-                // 处理依赖
-                if (manifest.dependencies != null)
+                // 处理依赖（新格式优先）
+                var allDeps = manifest.GetAllDependencies();
+                foreach (var dep in allDeps)
                 {
-                    foreach (var dep in manifest.dependencies)
+                    if (resolved.ContainsKey(dep.moduleId))
+                        continue;
+
+                    // 可选依赖：跳过未安装的
+                    if (dep.optional)
                     {
-                        if (resolved.ContainsKey(dep.moduleId))
+                        var isInstalled = InstalledModulesLock.Instance.IsInstalled(dep.moduleId);
+                        if (!isInstalled)
                         {
-                            // 检查版本兼容性
-                            var existingVer = resolved[dep.moduleId].Version;
-                            if (!IsVersionCompatible(existingVer, dep.versionRange))
-                            {
-                                result.Conflicts.Add($"版本冲突: {dep.moduleId} 需要 {dep.versionRange}，但已解析 {existingVer}");
-                                result.Success = false;
-                            }
+                            result.Warnings.Add($"跳过可选依赖: {dep.moduleId}");
                             continue;
                         }
-
-                        // 解析版本范围，获取最佳版本
-                        var depVersions = await _registry.GetVersionsAsync(registry, dep.moduleId);
-                        var bestVersion = FindBestVersion(depVersions, dep.versionRange);
-
-                        if (string.IsNullOrEmpty(bestVersion))
-                        {
-                            result.Conflicts.Add($"找不到满足 {dep.versionRange} 的 {dep.moduleId} 版本");
-                            result.Success = false;
-                            continue;
-                        }
-
-                        pending.Enqueue((dep.moduleId, bestVersion, rid));
                     }
+
+                    // 确定使用的仓库源
+                    var depRegistryId = !string.IsNullOrEmpty(dep.registryId) ? dep.registryId : rid;
+                    var depRegistry = HubSettings.Instance.registries.Find(r => r.id == depRegistryId) ?? registry;
+
+                    // 确定版本
+                    var depVersion = dep.version;
+                    if (string.IsNullOrEmpty(depVersion))
+                    {
+                        var depVersions = await _registry.GetVersionsAsync(depRegistry, dep.moduleId);
+                        depVersion = depVersions?.LastOrDefault();
+                    }
+
+                    if (string.IsNullOrEmpty(depVersion))
+                    {
+                        if (dep.optional)
+                        {
+                            result.Warnings.Add($"找不到可选依赖: {dep.moduleId}");
+                            continue;
+                        }
+                        result.Conflicts.Add($"找不到依赖模块: {dep.moduleId}");
+                        result.Success = false;
+                        continue;
+                    }
+
+                    pending.Enqueue((dep.moduleId, depVersion, depRegistryId));
                 }
             }
 
@@ -144,41 +158,6 @@ namespace Puffin.Editor.Hub.Services
             return result;
         }
 
-        /// <summary>
-        /// 检查版本是否兼容
-        /// </summary>
-        public bool IsVersionCompatible(string version, string versionRange)
-        {
-            if (string.IsNullOrEmpty(versionRange))
-                return true;
-
-            var v = ParseVersion(version);
-
-            // 支持的格式: ">=1.0.0", "^1.2.0", "~1.2.3", "1.0.0"
-            if (versionRange.StartsWith(">="))
-            {
-                var min = ParseVersion(versionRange.Substring(2));
-                return CompareVersions(v, min) >= 0;
-            }
-            if (versionRange.StartsWith("^"))
-            {
-                // ^1.2.3 表示 >=1.2.3 且 <2.0.0
-                var min = ParseVersion(versionRange.Substring(1));
-                var max = new[] { min[0] + 1, 0, 0 };
-                return CompareVersions(v, min) >= 0 && CompareVersions(v, max) < 0;
-            }
-            if (versionRange.StartsWith("~"))
-            {
-                // ~1.2.3 表示 >=1.2.3 且 <1.3.0
-                var min = ParseVersion(versionRange.Substring(1));
-                var max = new[] { min[0], min[1] + 1, 0 };
-                return CompareVersions(v, min) >= 0 && CompareVersions(v, max) < 0;
-            }
-
-            // 精确匹配
-            var exact = ParseVersion(versionRange);
-            return CompareVersions(v, exact) == 0;
-        }
 
         /// <summary>
         /// 检查已安装模块的更新
@@ -208,21 +187,6 @@ namespace Puffin.Editor.Hub.Services
             }
 
             return updates;
-        }
-
-        private string FindBestVersion(List<string> versions, string versionRange)
-        {
-            if (versions == null || versions.Count == 0)
-                return null;
-
-            // 从高到低找第一个兼容的版本
-            for (var i = versions.Count - 1; i >= 0; i--)
-            {
-                if (IsVersionCompatible(versions[i], versionRange))
-                    return versions[i];
-            }
-
-            return null;
         }
 
         private int[] ParseVersion(string version)
@@ -257,9 +221,10 @@ namespace Puffin.Editor.Hub.Services
                     return;
                 visited.Add(module.ModuleId);
 
-                if (module.Manifest?.dependencies != null)
+                var deps = module.Manifest?.GetAllDependencies();
+                if (deps != null)
                 {
-                    foreach (var dep in module.Manifest.dependencies)
+                    foreach (var dep in deps)
                     {
                         if (moduleDict.TryGetValue(dep.moduleId, out var depModule))
                             Visit(depModule);

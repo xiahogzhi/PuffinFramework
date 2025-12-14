@@ -13,9 +13,21 @@ MonoBehaviour:
   m_Name: ModuleRegistrySettings
   m_EditorClassIdentifier: PuffinFramework.Runtime::PuffinFrameworks.Runtime.Settings.ModuleRegistrySettings
   modules:
-  - moduleId: Config
+  - moduleId: Puffin.Test
     enabled: 1
     dependencies: []
-  - moduleId: Timer
+  - moduleId: Puffin.LuabanConfig
+    enabled: 1
+    dependencies: []
+  - moduleId: Puffin.LuabanConfig2
+    enabled: 1
+    dependencies: []
+  - moduleId: LubanConfigModule
+    enabled: 1
+    dependencies: []
+  - moduleId: LuabanConfigModule
+    enabled: 1
+    dependencies: []
+  - moduleId: TimerModule
     enabled: 1
     dependencies: []

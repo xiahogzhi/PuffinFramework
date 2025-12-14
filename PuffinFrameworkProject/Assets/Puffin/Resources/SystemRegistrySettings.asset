@@ -13,14 +13,8 @@ MonoBehaviour:
   m_Name: SystemRegistrySettings
   m_EditorClassIdentifier: PuffinFramework.Runtime::PuffinFrameworks.Runtime.Settings.SystemRegistrySettings
   systems:
-  - typeName: Puffin.Modules.ConfigModule.Runtime.ConfigSystem
+  - typeName: Puffin.Modules.Puffin.LuabanConfig.Runtime.ConfigSystem
     displayName: ConfigSystem
-    enabled: 1
-    priority: 0
-    alias: 
-    dependencies: []
-  - typeName: PuffinFramework.Modules.Timer.Puffin.Modules.Timer.Runtime.TimerSystem
-    displayName: TimerSystem
     enabled: 1
     priority: 0
     alias: 

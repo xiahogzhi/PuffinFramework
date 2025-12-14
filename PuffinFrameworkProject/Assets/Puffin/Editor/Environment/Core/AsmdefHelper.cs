@@ -34,12 +34,13 @@ namespace Puffin.Editor.Environment.Core
         {
             var hasCs = Directory.GetFiles(destDir, "*.cs", SearchOption.AllDirectories).Length > 0;
             var hasDll = Directory.GetFiles(destDir, "*.dll", SearchOption.AllDirectories).Length > 0;
-            var existingAsmdef = Directory.GetFiles(destDir, "*.asmdef", SearchOption.TopDirectoryOnly).FirstOrDefault();
+            var existingAsmdef =
+                Directory.GetFiles(destDir, "*.asmdef", SearchOption.TopDirectoryOnly).FirstOrDefault();
 
             string asmdefName = null;
 
             // 有代码但没有 asmdef，创建一个
-            if (hasCs && existingAsmdef == null)
+            if (hasCs && existingAsmdef == null && !string.IsNullOrEmpty(dep.asmdefName))
             {
                 asmdefName = dep.asmdefName ?? dep.id.Replace(".", "_");
                 CreateAsmdef(destDir, asmdefName);
@@ -53,10 +54,26 @@ namespace Puffin.Editor.Environment.Core
             var modules = FindModulesUsingDep(dep.id);
             foreach (var moduleAsmdef in modules)
             {
-                if (asmdefName != null)
+                // 添加程序集引用（优先使用配置，否则使用检测到的）
+                if (dep.asmdefReferences is {Length: > 0})
+                {
+                    foreach (var asmRef in dep.asmdefReferences)
+                        AddAsmdefReference(moduleAsmdef, asmRef);
+                }
+                else if (asmdefName != null)
+                {
                     AddAsmdefReference(moduleAsmdef, asmdefName);
-                if (hasDll)
+                }
+
+                // 添加 DLL 引用（优先使用配置，否则自动检测）
+                if (dep.dllReferences is {Length: > 0})
+                {
+                    AddDllReferencesByName(moduleAsmdef, dep.dllReferences);
+                }
+                else if (hasDll)
+                {
                     AddDllReferences(moduleAsmdef, destDir);
+                }
             }
         }
 
@@ -83,7 +100,7 @@ namespace Puffin.Editor.Environment.Core
         private static void CreateAsmdef(string destDir, string asmdefName)
         {
             var asmdefPath = Path.Combine(destDir, $"{asmdefName}.asmdef");
-            var data = new AsmdefData { name = asmdefName, allowUnsafeCode = HasUnsafeCode(destDir) };
+            var data = new AsmdefData {name = asmdefName, allowUnsafeCode = HasUnsafeCode(destDir)};
             File.WriteAllText(asmdefPath, JsonUtility.ToJson(data, true));
         }
 
@@ -95,6 +112,7 @@ namespace Puffin.Editor.Environment.Core
                 if (content.Contains("unsafe ") || content.Contains("unsafe{"))
                     return true;
             }
+
             return false;
         }
 
@@ -106,22 +124,30 @@ namespace Puffin.Editor.Environment.Core
 
             foreach (var moduleDir in Directory.GetDirectories(modulesDir))
             {
-                var depsFiles = Directory.GetFiles(moduleDir, "dependencies.json", SearchOption.AllDirectories);
-                foreach (var depsFile in depsFiles)
+                var manifestPath = Path.Combine(moduleDir, "module.json");
+                if (!File.Exists(manifestPath)) continue;
+
+                try
                 {
-                    var config = DependencyConfig.LoadFromJson(depsFile);
-                    if (config?.dependencies?.Any(d => d.id == depId) == true)
+                    var json = File.ReadAllText(manifestPath);
+                    var manifest = JsonUtility.FromJson<Hub.Data.HubModuleManifest>(json);
+                    if (manifest?.envDependencies?.Any(d => d.id == depId) == true)
                     {
                         // 查找该模块的 Runtime asmdef
                         var runtimeDir = Path.Combine(moduleDir, "Runtime");
                         if (Directory.Exists(runtimeDir))
                         {
-                            var asmdef = Directory.GetFiles(runtimeDir, "*.asmdef", SearchOption.TopDirectoryOnly).FirstOrDefault();
+                            var asmdef = Directory.GetFiles(runtimeDir, "*.asmdef", SearchOption.TopDirectoryOnly)
+                                .FirstOrDefault();
                             if (asmdef != null) result.Add(asmdef);
                         }
                     }
                 }
+                catch
+                {
+                }
             }
+
             return result;
         }
 
@@ -157,12 +183,18 @@ namespace Puffin.Editor.Environment.Core
             var dlls = Directory.GetFiles(destDir, "*.dll", SearchOption.AllDirectories)
                 .Select(Path.GetFileName).ToList();
             if (dlls.Count == 0) return;
+            AddDllReferencesByName(moduleAsmdefPath, dlls.ToArray());
+        }
+
+        private static void AddDllReferencesByName(string moduleAsmdefPath, string[] dllNames)
+        {
+            if (dllNames == null || dllNames.Length == 0) return;
 
             var json = File.ReadAllText(moduleAsmdefPath);
             var data = JsonUtility.FromJson<AsmdefData>(json);
             var changed = false;
 
-            foreach (var dll in dlls)
+            foreach (var dll in dllNames)
             {
                 if (!data.precompiledReferences.Contains(dll))
                 {
@@ -211,6 +243,7 @@ namespace Puffin.Editor.Environment.Core
                 if (Path.GetFileNameWithoutExtension(path) == asmdefName)
                     return guid;
             }
+
             return "";
         }
     }
