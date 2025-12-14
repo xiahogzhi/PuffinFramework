@@ -3,7 +3,10 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using Cysharp.Threading.Tasks;
 using Puffin.Editor.Environment;
+using Puffin.Modules.ConfigModule.Runtime;
+using Puffin.Runtime.Core;
 using UnityEditor;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
@@ -79,6 +82,9 @@ namespace Puffin.Modules.ConfigModule.Editor
             if (GUILayout.Button("保存配置", EditorStyles.toolbarButton))
                 SaveLubanConf();
 
+            if (GUILayout.Button("重新加载", EditorStyles.toolbarButton))
+                PuffinFramework.GetSystem<IConfigSystem>()?.ReloadAsync().Forget();
+
             GUILayout.FlexibleSpace();
 
             if (GUILayout.Button("重新下载模板", EditorStyles.toolbarButton))
@@ -126,7 +132,7 @@ namespace Puffin.Modules.ConfigModule.Editor
                 EditorGUILayout.PropertyField(_settingsSO.FindProperty("codeTarget"), new GUIContent("代码目标"));
 
                 var ct = LubanSettings.Instance.codeTarget;
-                if (ct is not (CodeTarget.CsBin or CodeTarget.CsSimpleJson or CodeTarget.CsDotnetJson or CodeTarget.CsNewtonsoft))
+                if (ct is not (CodeTarget.CsBin or CodeTarget.CsSimpleJson or CodeTarget.CsNewtonsoft))
                     EditorGUILayout.HelpBox("当前代码目标不是 C#，Unity 项目可能无法使用生成的代码", MessageType.Warning);
 
                 EditorGUILayout.PropertyField(_settingsSO.FindProperty("dataTarget"), new GUIContent("数据格式"));
@@ -185,9 +191,6 @@ namespace Puffin.Modules.ConfigModule.Editor
                 case CodeTarget.CsNewtonsoft:
                     AddDep(deps, "Newtonsoft.Json");
                     break;
-                case CodeTarget.CsDotnetJson:
-                    AddDep(deps, "System.Text.Json");
-                    break;
             }
             return deps;
         }
@@ -203,7 +206,6 @@ namespace Puffin.Modules.ConfigModule.Editor
             CodeTarget.CsBin => ("Luban 运行时", "cs-bin 格式需要 Luban 运行时库（ByteBuf）"),
             CodeTarget.CsSimpleJson => ("SimpleJSON", "cs-simple-json 格式需要 SimpleJSON 库"),
             CodeTarget.CsNewtonsoft => ("Newtonsoft.Json", "cs-newtonsoft-json 格式需要 Newtonsoft.Json 库"),
-            CodeTarget.CsDotnetJson => ("System.Text.Json", "cs-dotnet-json 格式需要 System.Text.Json 库"),
             _ => ("", "")
         };
 
@@ -264,18 +266,30 @@ namespace Puffin.Modules.ConfigModule.Editor
         private void GenerateConfig()
         {
             _isProcessing = true;
-            _status = "正在保存配置...";
-            Repaint();
-
-            SaveLubanConf();
-
             _status = "正在生成配置...";
             Repaint();
 
+            SaveLubanConf();
+            var success = GenerateConfigStatic();
+
+            _status = success ? "生成完成" : "生成失败";
+            _isProcessing = false;
+            Repaint();
+        }
+
+        /// <summary>
+        /// 静态生成配置方法
+        /// </summary>
+        public static bool GenerateConfigStatic()
+        {
             try
             {
                 var confDir = GetLubanConfigDir();
                 var confPath = Path.Combine(confDir, "luban.conf");
+
+                // 保存配置
+                if (!Directory.Exists(confDir)) Directory.CreateDirectory(confDir);
+                File.WriteAllText(confPath, LubanSettings.Instance.GenerateLubanConf());
 
                 var settings = LubanSettings.Instance;
                 var codeTarget = LubanSettings.GetCodeTargetString(settings.codeTarget);
@@ -286,7 +300,7 @@ namespace Puffin.Modules.ConfigModule.Editor
                 Directory.CreateDirectory(codeDir);
                 Directory.CreateDirectory(dataDir);
 
-                var lubanExe = GetLubanExePath();
+                var lubanExe = GetLubanExePathStatic();
                 var args = $"\"{lubanExe}\" --conf \"{confPath}\" -t client -c {codeTarget} -d {dataTarget} -x outputCodeDir=\"{codeDir}\" -x outputDataDir=\"{dataDir}\"";
 
                 if (!string.IsNullOrEmpty(settings.timeZone))
@@ -299,24 +313,45 @@ namespace Puffin.Modules.ConfigModule.Editor
                 if (EnvironmentChecker.RunCommand("dotnet", args, out var output, confDir))
                 {
                     GenerateConfigLoader(settings, codeDir);
-                    _status = "生成完成";
+                    if (LubanSettings.NeedsRuntime(settings.codeTarget))
+                        GenerateLubanRuntime(codeDir);
                     Debug.Log($"[Luban] 生成完成\n{output}");
                     AssetDatabase.Refresh();
+                    return true;
                 }
-                else
-                {
-                    _status = "生成失败";
-                    Debug.LogError($"[Luban] 生成失败\n{output}");
-                }
+
+                Debug.LogError($"[Luban] 生成失败\n{output}");
+                return false;
             }
             catch (Exception e)
             {
-                _status = $"生成失败: {e.Message}";
                 Debug.LogError($"[Luban] 生成失败: {e}");
+                return false;
             }
+        }
 
-            _isProcessing = false;
-            Repaint();
+        private static string GetLubanExePathStatic()
+        {
+            var depConfig = DependencyManager.LoadConfig(DependenciesJsonPath);
+            var depLubanTool = DependencyManager.FindDependency(depConfig, "LubanTool");
+            if (depLubanTool == null) return null;
+            var manager = new DependencyManager();
+            var installPath = manager.GetInstallPath(depLubanTool);
+            return Path.Combine(installPath, "Luban", "Luban.dll");
+        }
+
+        /// <summary>
+        /// 检查必须依赖是否已安装
+        /// </summary>
+        public static bool CheckDependencies()
+        {
+            var config = DependencyManager.GetModuleConfig("ConfigModule");
+            if (config?.dependencies == null) return true;
+
+            var manager = new DependencyManager();
+            return config.dependencies
+                .Where(d => d.requirement == DependencyRequirement.Required)
+                .All(d => manager.IsInstalled(d));
         }
 
         private static void GenerateConfigLoader(LubanSettings settings, string codeDir)
@@ -326,7 +361,6 @@ namespace Puffin.Modules.ConfigModule.Editor
                 CodeTarget.CsBin => ("Func<string, byte[]> loader", "name => new Luban.ByteBuf(loader(name))", ""),
                 CodeTarget.CsSimpleJson => ("Func<string, string> loader", "name => SimpleJSON.JSON.Parse(loader(name))", ""),
                 CodeTarget.CsNewtonsoft => ("Func<string, string> loader", "name => Newtonsoft.Json.JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JArray>(loader(name))!", ""),
-                CodeTarget.CsDotnetJson => ("Func<string, string> loader", "name => System.Text.Json.JsonDocument.Parse(loader(name)).RootElement", ""),
                 _ => ("Func<string, string> loader", "loader", "")
             };
 
@@ -347,11 +381,35 @@ namespace Puffin.Modules.ConfigModule.Runtime
             File.WriteAllText(loaderPath, code);
         }
 
-        [MenuItem("Puffin Framework/Config/Generate Config")]
+        private static void GenerateLubanRuntime(string codeDir)
+        {
+            var srcDir = Path.Combine(Application.dataPath, "Puffin/Modules/ConfigModule/Runtime/LubanLib");
+            if (!Directory.Exists(srcDir))
+            {
+                Debug.LogWarning("[Luban] 运行时未安装，请先安装 LubanRuntime 依赖");
+                return;
+            }
+
+            var destDir = Path.Combine(codeDir, "Luban");
+            Directory.CreateDirectory(destDir);
+
+            foreach (var file in Directory.GetFiles(srcDir, "*.cs"))
+                File.Copy(file, Path.Combine(destDir, Path.GetFileName(file)), true);
+        }
+
+        [MenuItem("Puffin Framework/Config/Generate Config &q")]
         public static void GenerateConfigMenu()
         {
-            var window = GetWindow<LubanEditorWindow>();
-            window.GenerateConfig();
+            // 检查依赖是否安装
+            if (!CheckDependencies())
+            {
+                // 打开窗口让用户安装依赖
+                ShowWindow();
+                return;
+            }
+
+            // 直接生成，不打开窗口
+            GenerateConfigStatic();
         }
     }
 }

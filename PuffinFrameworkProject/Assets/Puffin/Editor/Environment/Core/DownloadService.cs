@@ -221,18 +221,9 @@ namespace Puffin.Editor.Environment
 
                 if (success)
                 {
-                    var destDir = manager.GetInstallPath(task.Dep);
-                    AsmdefHelper.OnInstalled(task.Dep, destDir);
-
                     EditorApplication.delayCall += () =>
                     {
                         AssetDatabase.Refresh();
-                        // 刷新后再添加引用（需要先导入 asmdef 才能获取 GUID）
-                        EditorApplication.delayCall += () =>
-                        {
-                            AsmdefHelper.OnInstalled(task.Dep, destDir);
-                            AssetDatabase.Refresh();
-                        };
                         OnTasksChanged?.Invoke();
                     };
                 }

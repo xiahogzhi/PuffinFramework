@@ -33,7 +33,7 @@ namespace Puffin.Modules.ConfigModule.Editor
         public DataTarget dataTarget = DataTarget.Json;
 
         [Tooltip("顶层命名空间")]
-        public string topModule = "PuffinFramework.Config.Gen";
+        public string topModule = "PuffinFrameworks.Config.Gen";
 
         [Tooltip("Tables 管理类名")]
         public string managerName = "Tables";
@@ -132,13 +132,12 @@ namespace Puffin.Modules.ConfigModule.Editor
             return JsonUtility.ToJson(conf, true);
         }
 
-        public static bool NeedsRuntime(CodeTarget target) => target is CodeTarget.CsBin or CodeTarget.CsSimpleJson or CodeTarget.CsNewtonsoft or CodeTarget.CsDotnetJson;
+        public static bool NeedsRuntime(CodeTarget target) => target is CodeTarget.CsBin or CodeTarget.CsSimpleJson or CodeTarget.CsNewtonsoft;
 
         public static string GetCodeTargetString(CodeTarget target) => target switch
         {
             CodeTarget.CsBin => "cs-bin",
             CodeTarget.CsSimpleJson => "cs-simple-json",
-            CodeTarget.CsDotnetJson => "cs-dotnet-json",
             CodeTarget.CsNewtonsoft => "cs-newtonsoft-json",
             CodeTarget.JavaBin => "java-bin",
             CodeTarget.JavaJson => "java-json",
@@ -174,7 +173,6 @@ namespace Puffin.Modules.ConfigModule.Editor
     {
         [InspectorName("C# Binary")] CsBin,
         [InspectorName("C# SimpleJson")] CsSimpleJson,
-        [InspectorName("C# System.Text.Json")] CsDotnetJson,
         [InspectorName("C# Newtonsoft.Json")] CsNewtonsoft,
         [InspectorName("Java Binary")] JavaBin,
         [InspectorName("Java Json")] JavaJson,

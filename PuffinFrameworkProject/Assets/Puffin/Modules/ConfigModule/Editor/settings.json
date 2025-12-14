@@ -1,6 +1,0 @@
-{
-  "lubanVersion": "4.5.0",
-  "lubanDownloadUrl": "https://github.com/focus-creative-games/luban/releases/download/v{0}/Luban.7z",
-  "templateRepoUrl": "https://gitee.com/focus-creative-games/luban_examples.git",
-  "sevenZipDownloadUrl": "https://www.7-zip.org/a/7zr.exe"
-}

@@ -82,26 +82,6 @@ namespace Puffin.Modules.ConfigModule.Runtime
             }
 
             await UniTask.Yield();
-
-            // // 获取表
-            // var itemTable = GetTable<Tbitem>();
-            //
-            // Log.Info(itemTable);
-            // // 按名称获取
-            // var table2 = GetTable("Tbitem");
-            // Log.Info(table2);
-            //
-            // // 获取所有表类型
-            // var types = GetAllTableTypes();
-            // Log.Info("获取所有表类型");
-            // foreach (var type in types)
-            // {
-            //     Log.Info(type);
-            // }
-            //
-            // // 根据 ID 获取数据
-            // var item = GetById<Tbitem, item>(1001);
-            // Log.Info(item);
         }
 
         private static byte[] LoadBytes(string name)

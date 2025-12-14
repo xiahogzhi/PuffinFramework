@@ -136,9 +136,6 @@ namespace Puffin.Editor.Environment
             if (!Directory.Exists(path)) return false;
             try
             {
-                // 先移除 asmdef 引用
-                AsmdefHelper.OnUninstalling(dep, path);
-
                 Directory.Delete(path, true);
                 // 删除对应的 .meta 文件
                 var metaPath = path + ".meta";
