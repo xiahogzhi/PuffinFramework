@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(unzip:*)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "WebFetch(domain:docs.unity3d.com)",
+      "WebSearch"
     ]
   }
 }

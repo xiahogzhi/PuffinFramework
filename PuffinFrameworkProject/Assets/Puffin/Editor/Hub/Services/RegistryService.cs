@@ -58,6 +58,7 @@ namespace Puffin.Editor.Hub.Services
                 {
                     ModuleId = moduleId,
                     DisplayName = displayName,
+                    Description = manifest?.description,
                     LatestVersion = version,
                     InstalledVersion = version,
                     RegistryId = sourceRegistryId ?? "local",
@@ -66,7 +67,8 @@ namespace Puffin.Editor.Hub.Services
                     IsInstalled = true,
                     IsLocal = sourceRegistryId == null,
                     HasUpdate = false,
-                    Manifest = manifest
+                    Manifest = manifest,
+                    LoadState = ModuleLoadState.Loaded  // 已安装模块已有本地 manifest
                 });
             }
 
@@ -98,7 +100,7 @@ namespace Puffin.Editor.Hub.Services
         }
 
         /// <summary>
-        /// 获取指定仓库的远程模块列表
+        /// 获取指定仓库的远程模块列表（只返回基本信息，manifest 需要懒加载）
         /// </summary>
         public async UniTask<List<HubModuleInfo>> FetchRegistryModulesAsync(RegistrySource registry, Dictionary<string, HubModuleInfo> installedMap, bool forceRefresh = false)
         {
@@ -108,17 +110,6 @@ namespace Puffin.Editor.Hub.Services
             {
                 var index = await FetchRegistryIndexAsync(registry, forceRefresh);
                 if (index?.modules == null) return result;
-
-                // 并行获取所有模块的 manifest
-                var manifestTasks = new List<UniTask<(string moduleId, HubModuleManifest manifest)>>();
-                foreach (var kvp in index.modules)
-                {
-                    var moduleId = kvp.Key;
-                    var version = kvp.Value.latest;
-                    manifestTasks.Add(FetchManifestWithIdAsync(registry, moduleId, version));
-                }
-                var manifests = await UniTask.WhenAll(manifestTasks);
-                var manifestMap = manifests.Where(m => m.manifest != null).ToDictionary(m => m.moduleId, m => m.manifest);
 
                 foreach (var kvp in index.modules)
                 {
@@ -130,15 +121,10 @@ namespace Puffin.Editor.Hub.Services
                     var isInstalled = installed != null && installed.SourceRegistryId == registry.id;
                     var installedVersion = isInstalled ? installed.InstalledVersion : null;
 
-                    // 从 manifest 获取 displayName
-                    manifestMap.TryGetValue(moduleId, out var manifest);
-                    var displayName = installed?.DisplayName ?? manifest?.displayName ?? moduleId;
-
                     var info = new HubModuleInfo
                     {
                         ModuleId = moduleId,
-                        DisplayName = displayName,
-                        Description = manifest?.description,
+                        DisplayName = installed?.DisplayName,  // 已安装的用本地名字，否则等懒加载
                         LatestVersion = versionInfo.latest,
                         RemoteVersion = versionInfo.latest,
                         RegistryId = registry.id,
@@ -150,7 +136,7 @@ namespace Puffin.Editor.Hub.Services
                         SourceRegistryName = isInstalled ? registry.name : null,
                         Versions = versionInfo.versions ?? new List<string> { versionInfo.latest },
                         UpdatedAt = versionInfo.updatedAt,
-                        Manifest = manifest
+                        LoadState = ModuleLoadState.NotLoaded
                     };
 
                     info.HasUpdate = isInstalled &&
@@ -169,10 +155,47 @@ namespace Puffin.Editor.Hub.Services
             return result;
         }
 
-        private async UniTask<(string moduleId, HubModuleManifest manifest)> FetchManifestWithIdAsync(RegistrySource registry, string moduleId, string version)
+        /// <summary>
+        /// 懒加载模块的 manifest 信息
+        /// </summary>
+        public async UniTask<bool> LoadModuleManifestAsync(HubModuleInfo module)
         {
-            var manifest = await GetManifestAsync(registry, moduleId, version);
-            return (moduleId, manifest);
+            if (module.LoadState == ModuleLoadState.Loading || module.LoadState == ModuleLoadState.Loaded)
+                return module.LoadState == ModuleLoadState.Loaded;
+
+            module.LoadState = ModuleLoadState.Loading;
+
+            try
+            {
+                var registry = HubSettings.Instance.registries.Find(r => r.id == module.RegistryId);
+                if (registry == null)
+                {
+                    module.LoadState = ModuleLoadState.Failed;
+                    return false;
+                }
+
+                var manifest = await GetManifestAsync(registry, module.ModuleId, module.LatestVersion);
+                if (manifest != null)
+                {
+                    module.DisplayName = manifest.displayName;
+                    module.Description = manifest.description;
+                    module.Author = manifest.author;
+                    module.Tags = manifest.tags;
+                    module.ReleaseNotes = manifest.releaseNotes;
+                    module.Dependencies = manifest.dependencies;
+                    module.Manifest = manifest;
+                    module.LoadState = ModuleLoadState.Loaded;
+                    return true;
+                }
+
+                module.LoadState = ModuleLoadState.Failed;
+                return false;
+            }
+            catch
+            {
+                module.LoadState = ModuleLoadState.Failed;
+                return false;
+            }
         }
 
         /// <summary>

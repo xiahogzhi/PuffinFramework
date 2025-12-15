@@ -19,7 +19,7 @@ namespace Puffin.Runtime.Settings
     /// 模块注册配置 - 管理模块的启用/禁用状态
     /// </summary>
     [SettingsPath("ModuleRegistrySettings")]
-    [CreateAssetMenu(fileName = "ModuleRegistrySettings", menuName = "PuffinFramework/Module Registry Settings")]
+    // [CreateAssetMenu(fileName = "ModuleRegistrySettings", menuName = "PuffinFramework/Module Registry Settings")]
     public class ModuleRegistrySettings : SettingsBase<ModuleRegistrySettings>
     {
         [Tooltip("模块列表")]
@@ -37,7 +37,8 @@ namespace Puffin.Runtime.Settings
             if (_effectiveStateCache == null)
                 RebuildCache();
 
-            return _effectiveStateCache.TryGetValue(moduleId, out var enabled) && enabled;
+            // 不在缓存中的模块默认启用
+            return !_effectiveStateCache.TryGetValue(moduleId, out var enabled) || enabled;
         }
 
         /// <summary>

@@ -137,6 +137,17 @@ namespace Puffin.Editor.Hub.Data
     }
 
     /// <summary>
+    /// 模块加载状态
+    /// </summary>
+    public enum ModuleLoadState
+    {
+        NotLoaded,  // 未加载
+        Loading,    // 加载中
+        Loaded,     // 已加载
+        Failed      // 加载失败
+    }
+
+    /// <summary>
     /// Hub 显示用的模块信息
     /// </summary>
     public class HubModuleInfo
@@ -161,6 +172,7 @@ namespace Puffin.Editor.Hub.Data
         public List<string> Dependencies; // 依赖列表
         public HubModuleManifest Manifest;
         public string UpdatedAt;          // 最后更新时间
+        public ModuleLoadState LoadState; // 加载状态
     }
 }
 #endif
