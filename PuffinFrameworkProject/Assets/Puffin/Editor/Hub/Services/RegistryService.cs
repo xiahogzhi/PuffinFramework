@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using Cysharp.Threading.Tasks;
 using Puffin.Editor.Hub.Data;
+using Puffin.Runtime.Tools;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -108,6 +109,17 @@ namespace Puffin.Editor.Hub.Services
                 var index = await FetchRegistryIndexAsync(registry, forceRefresh);
                 if (index?.modules == null) return result;
 
+                // 并行获取所有模块的 manifest
+                var manifestTasks = new List<UniTask<(string moduleId, HubModuleManifest manifest)>>();
+                foreach (var kvp in index.modules)
+                {
+                    var moduleId = kvp.Key;
+                    var version = kvp.Value.latest;
+                    manifestTasks.Add(FetchManifestWithIdAsync(registry, moduleId, version));
+                }
+                var manifests = await UniTask.WhenAll(manifestTasks);
+                var manifestMap = manifests.Where(m => m.manifest != null).ToDictionary(m => m.moduleId, m => m.manifest);
+
                 foreach (var kvp in index.modules)
                 {
                     var moduleId = kvp.Key;
@@ -118,10 +130,15 @@ namespace Puffin.Editor.Hub.Services
                     var isInstalled = installed != null && installed.SourceRegistryId == registry.id;
                     var installedVersion = isInstalled ? installed.InstalledVersion : null;
 
+                    // 从 manifest 获取 displayName
+                    manifestMap.TryGetValue(moduleId, out var manifest);
+                    var displayName = installed?.DisplayName ?? manifest?.displayName ?? moduleId;
+
                     var info = new HubModuleInfo
                     {
                         ModuleId = moduleId,
-                        DisplayName = installed?.DisplayName ?? moduleId,
+                        DisplayName = displayName,
+                        Description = manifest?.description,
                         LatestVersion = versionInfo.latest,
                         RemoteVersion = versionInfo.latest,
                         RegistryId = registry.id,
@@ -132,7 +149,8 @@ namespace Puffin.Editor.Hub.Services
                         SourceRegistryId = isInstalled ? registry.id : null,
                         SourceRegistryName = isInstalled ? registry.name : null,
                         Versions = versionInfo.versions ?? new List<string> { versionInfo.latest },
-                        UpdatedAt = versionInfo.updatedAt
+                        UpdatedAt = versionInfo.updatedAt,
+                        Manifest = manifest
                     };
 
                     info.HasUpdate = isInstalled &&
@@ -149,6 +167,12 @@ namespace Puffin.Editor.Hub.Services
             }
 
             return result;
+        }
+
+        private async UniTask<(string moduleId, HubModuleManifest manifest)> FetchManifestWithIdAsync(RegistrySource registry, string moduleId, string version)
+        {
+            var manifest = await GetManifestAsync(registry, moduleId, version);
+            return (moduleId, manifest);
         }
 
         /// <summary>
@@ -334,54 +358,32 @@ namespace Puffin.Editor.Hub.Services
 
             // GitHub API 返回 JSON，content 字段是 base64 编码
             var response = request.downloadHandler.text;
-            var contentMatch = System.Text.RegularExpressions.Regex.Match(response, "\"content\"\\s*:\\s*\"([^\"]+)\"");
-            if (!contentMatch.Success)
-                return null;
+            var json = JsonValue.Parse(response);
+            var content = json["content"].AsRawString();
+            if (string.IsNullOrEmpty(content)) return null;
 
-            var base64Content = contentMatch.Groups[1].Value.Replace("\\n", "");
+            var base64Content = content.Replace("\\n", "");
             var bytes = Convert.FromBase64String(base64Content);
             return System.Text.Encoding.UTF8.GetString(bytes);
         }
 
-        private Dictionary<string, ModuleVersionInfo> ParseModulesDict(string json)
+        private Dictionary<string, ModuleVersionInfo> ParseModulesDict(string jsonStr)
         {
             var result = new Dictionary<string, ModuleVersionInfo>();
+            var root = JsonValue.Parse(jsonStr);
+            var modules = root["modules"];
+            if (modules.Type != JsonType.Object) return result;
 
-            // 使用正则解析 "modules": { "ModuleId": { "latest": "x.x.x", "versions": [...] } }
-            var modulesStart = json.IndexOf("\"modules\"", StringComparison.Ordinal);
-            if (modulesStart < 0) return result;
-
-            var braceStart = json.IndexOf('{', modulesStart + 9);
-            if (braceStart < 0) return result;
-
-            // 找到 modules 对象的结束位置
-            var depth = 1;
-            var pos = braceStart + 1;
-            while (pos < json.Length && depth > 0)
+            var enumerator = modules.GetObjectEnumerator();
+            while (enumerator.MoveNext())
             {
-                if (json[pos] == '{') depth++;
-                else if (json[pos] == '}') depth--;
-                pos++;
-            }
-            var modulesJson = json.Substring(braceStart, pos - braceStart);
-
-            // 用正则匹配每个模块
-            var modulePattern = new System.Text.RegularExpressions.Regex(
-                "\"([^\"]+)\"\\s*:\\s*\\{\\s*\"latest\"\\s*:\\s*\"([^\"]+)\"\\s*,\\s*\"versions\"\\s*:\\s*\\[([^\\]]+)\\](?:\\s*,\\s*\"updatedAt\"\\s*:\\s*\"([^\"]+)\")?");
-
-            foreach (System.Text.RegularExpressions.Match m in modulePattern.Matches(modulesJson))
-            {
-                var moduleId = m.Groups[1].Value;
-                var latest = m.Groups[2].Value;
-                var versionsStr = m.Groups[3].Value;
-                var updatedAt = m.Groups[4].Success ? m.Groups[4].Value : null;
-
-                var versions = new List<string>();
-                var versionPattern = new System.Text.RegularExpressions.Regex("\"([^\"]+)\"");
-                foreach (System.Text.RegularExpressions.Match v in versionPattern.Matches(versionsStr))
-                    versions.Add(v.Groups[1].Value);
-
-                result[moduleId] = new ModuleVersionInfo { latest = latest, versions = versions, updatedAt = updatedAt };
+                var (moduleId, moduleData) = enumerator.Current;
+                result[moduleId] = new ModuleVersionInfo
+                {
+                    latest = moduleData["latest"].AsString(),
+                    versions = moduleData["versions"].ToStringList() ?? new List<string>(),
+                    updatedAt = moduleData["updatedAt"].AsString()
+                };
             }
 
             return result;

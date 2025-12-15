@@ -11,12 +11,6 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 37179a66768ab414c9660d466d43a972, type: 3}
   m_Name: SystemRegistrySettings
-  m_EditorClassIdentifier: PuffinFramework.Runtime::PuffinFrameworks.Runtime.Settings.SystemRegistrySettings
-  systems:
-  - typeName: Puffin.Modules.Puffin.LuabanConfig.Runtime.ConfigSystem
-    displayName: ConfigSystem
-    enabled: 1
-    priority: 0
-    alias: 
-    dependencies: []
+  m_EditorClassIdentifier: PuffinFramework.Runtime::Puffin.Runtime.Settings.SystemRegistrySettings
+  systems: []
   interfaceSelections: []

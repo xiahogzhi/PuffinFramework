@@ -7,6 +7,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using Cysharp.Threading.Tasks;
 using Puffin.Editor.Hub.Data;
+using Puffin.Runtime.Tools;
 using UnityEngine;
 using CompressionLevel = System.IO.Compression.CompressionLevel;
 
@@ -271,7 +272,7 @@ namespace Puffin.Editor.Hub.Services
 
                 // 3. 更新 registry.json
                 onStatus?.Invoke("正在更新 registry.json...");
-                var registrySuccess = await UpdateRegistryJsonAsync(owner, repo, registry.branch, moduleId, version, registry.authToken);
+                var registrySuccess = await UpdateRegistryJsonAsync(owner, repo, registry.branch, moduleId, version, manifest.displayName, registry.authToken);
                 if (!registrySuccess)
                     Debug.LogWarning("[Hub] registry.json 更新失败，模块已上传但可能不会显示在列表中");
 
@@ -314,10 +315,8 @@ namespace Puffin.Editor.Hub.Services
 
                 if (getRequest.result == UnityEngine.Networking.UnityWebRequest.Result.Success)
                 {
-                    var response = getRequest.downloadHandler.text;
-                    var shaMatch = System.Text.RegularExpressions.Regex.Match(response, "\"sha\"\\s*:\\s*\"([^\"]+)\"");
-                    if (shaMatch.Success)
-                        sha = shaMatch.Groups[1].Value;
+                    var json = JsonValue.Parse(getRequest.downloadHandler.text);
+                    sha = json["sha"].AsString();
                 }
                 getRequest.Dispose();
             }
@@ -389,7 +388,7 @@ namespace Puffin.Editor.Hub.Services
         /// <summary>
         /// 更新 registry.json，添加新模块版本
         /// </summary>
-        private async UniTask<bool> UpdateRegistryJsonAsync(string owner, string repo, string branch, string moduleId, string version, string token)
+        private async UniTask<bool> UpdateRegistryJsonAsync(string owner, string repo, string branch, string moduleId, string version, string displayName, string token)
         {
             var url = $"https://api.github.com/repos/{owner}/{repo}/contents/registry.json?ref={branch}";
 
@@ -409,18 +408,12 @@ namespace Puffin.Editor.Hub.Services
 
                 if (getRequest.result == UnityEngine.Networking.UnityWebRequest.Result.Success)
                 {
-                    var response = getRequest.downloadHandler.text;
-
-                    // 提取 sha
-                    var shaMatch = System.Text.RegularExpressions.Regex.Match(response, "\"sha\"\\s*:\\s*\"([^\"]+)\"");
-                    if (shaMatch.Success)
-                        sha = shaMatch.Groups[1].Value;
-
-                    // 提取 content (base64)
-                    var contentMatch = System.Text.RegularExpressions.Regex.Match(response, "\"content\"\\s*:\\s*\"([^\"]+)\"");
-                    if (contentMatch.Success)
+                    var json = JsonValue.Parse(getRequest.downloadHandler.text);
+                    sha = json["sha"].AsString();
+                    var content = json["content"].AsRawString();
+                    if (!string.IsNullOrEmpty(content))
                     {
-                        var base64 = contentMatch.Groups[1].Value.Replace("\\n", "");
+                        var base64 = content.Replace("\\n", "");
                         existingContent = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(base64));
                     }
                 }
@@ -433,50 +426,26 @@ namespace Puffin.Editor.Hub.Services
 
             if (!string.IsNullOrEmpty(existingContent))
             {
-                // 手动解析（JsonUtility 不支持字典）
                 try
                 {
-                    // 解析 name 和 version
-                    var nameMatch = System.Text.RegularExpressions.Regex.Match(existingContent, "\"name\"\\s*:\\s*\"([^\"]+)\"");
-                    if (nameMatch.Success) registry.name = nameMatch.Groups[1].Value;
+                    var json = JsonValue.Parse(existingContent);
+                    registry.name = json["name"].AsString() ?? registry.name;
+                    registry.version = json["version"].AsString() ?? registry.version;
 
-                    var versionMatch = System.Text.RegularExpressions.Regex.Match(existingContent, "\"version\"\\s*:\\s*\"([^\"]+)\"");
-                    if (versionMatch.Success) registry.version = versionMatch.Groups[1].Value;
-
-                    // 解析 modules 字典
-                    var modulesStart = existingContent.IndexOf("\"modules\"", StringComparison.Ordinal);
-                    if (modulesStart >= 0)
+                    var modules = json["modules"];
+                    if (modules.Type == JsonType.Object)
                     {
-                        var braceStart = existingContent.IndexOf('{', modulesStart + 9);
-                        if (braceStart >= 0)
+                        var enumerator = modules.GetObjectEnumerator();
+                        while (enumerator.MoveNext())
                         {
-                            var depth = 1;
-                            var pos = braceStart + 1;
-                            while (pos < existingContent.Length && depth > 0)
+                            var (entryId, moduleData) = enumerator.Current;
+                            registry.modules.Add(new RegistryModuleEntry
                             {
-                                if (existingContent[pos] == '{') depth++;
-                                else if (existingContent[pos] == '}') depth--;
-                                pos++;
-                            }
-                            var existingModulesJson = existingContent.Substring(braceStart, pos - braceStart);
-
-                            // 解析每个模块
-                            var modulePattern = new System.Text.RegularExpressions.Regex("\"([^\"]+)\"\\s*:\\s*\\{\\s*\"latest\"\\s*:\\s*\"([^\"]+)\"\\s*,\\s*\"versions\"\\s*:\\s*\\[([^\\]]+)\\](?:\\s*,\\s*\"updatedAt\"\\s*:\\s*\"([^\"]+)\")?");
-                            foreach (System.Text.RegularExpressions.Match m in modulePattern.Matches(existingModulesJson))
-                            {
-                                var entry = new RegistryModuleEntry
-                                {
-                                    id = m.Groups[1].Value,
-                                    latest = m.Groups[2].Value,
-                                    versions = new List<string>(),
-                                    updatedAt = m.Groups[4].Success ? m.Groups[4].Value : null
-                                };
-                                var versionsStr = m.Groups[3].Value;
-                                var versionPattern = new System.Text.RegularExpressions.Regex("\"([^\"]+)\"");
-                                foreach (System.Text.RegularExpressions.Match v in versionPattern.Matches(versionsStr))
-                                    entry.versions.Add(v.Groups[1].Value);
-                                registry.modules.Add(entry);
-                            }
+                                id = entryId,
+                                latest = moduleData["latest"].AsString(),
+                                versions = moduleData["versions"].ToStringList() ?? new List<string>(),
+                                updatedAt = moduleData["updatedAt"].AsString(),
+                            });
                         }
                     }
                 }
@@ -503,17 +472,12 @@ namespace Puffin.Editor.Hub.Services
                     id = moduleId,
                     latest = version,
                     versions = new List<string> { version },
-                    updatedAt = now
+                    updatedAt = now,
                 });
             }
 
-            // 生成 JSON（手动构建以支持 modules 字典格式）
-            var modulesJson = string.Join(",\n    ", registry.modules.Select(m =>
-            {
-                var updatedPart = !string.IsNullOrEmpty(m.updatedAt) ? $", \"updatedAt\": \"{m.updatedAt}\"" : "";
-                return $"\"{m.id}\": {{ \"latest\": \"{m.latest}\", \"versions\": [{string.Join(", ", m.versions.Select(v => $"\"{v}\""))}]{updatedPart} }}";
-            }));
-            var newContent = $"{{\n  \"name\": \"{registry.name}\",\n  \"version\": \"{registry.version}\",\n  \"modules\": {{\n    {modulesJson}\n  }}\n}}";
+            // 生成 JSON
+            var newContent = BuildRegistryJson(registry);
 
             // 上传
             var contentBytes = System.Text.Encoding.UTF8.GetBytes(newContent);
@@ -562,13 +526,19 @@ namespace Puffin.Editor.Hub.Services
                 var filesJson = await FetchGitHubApiAsync(filesUrl, registry.authToken);
                 if (!string.IsNullOrEmpty(filesJson))
                 {
-                    // 解析文件列表并删除
-                    var filePattern = new System.Text.RegularExpressions.Regex("\"path\"\\s*:\\s*\"([^\"]+)\"[^}]*\"sha\"\\s*:\\s*\"([^\"]+)\"");
-                    foreach (System.Text.RegularExpressions.Match m in filePattern.Matches(filesJson))
+                    // 解析文件列表并删除（GitHub API 返回数组）
+                    var filesArray = JsonValue.Parse(filesJson);
+                    if (filesArray.Type == JsonType.Array)
                     {
-                        var filePath = m.Groups[1].Value;
-                        var sha = m.Groups[2].Value;
-                        await DeleteFileAsync(owner, repo, registry.branch, filePath, sha, registry.authToken);
+                        var enumerator = filesArray.GetArrayEnumerator();
+                        while (enumerator.MoveNext())
+                        {
+                            var file = enumerator.Current;
+                            var filePath = file["path"].AsString();
+                            var sha = file["sha"].AsString();
+                            if (!string.IsNullOrEmpty(filePath) && !string.IsNullOrEmpty(sha))
+                                await DeleteFileAsync(owner, repo, registry.branch, filePath, sha, registry.authToken);
+                        }
                     }
                 }
 
@@ -622,19 +592,16 @@ namespace Puffin.Editor.Hub.Services
             var response = await FetchGitHubApiAsync(url, token);
             if (string.IsNullOrEmpty(response)) return false;
 
-            // 提取 sha 和 content
-            var shaMatch = System.Text.RegularExpressions.Regex.Match(response, "\"sha\"\\s*:\\s*\"([^\"]+)\"");
-            var contentMatch = System.Text.RegularExpressions.Regex.Match(response, "\"content\"\\s*:\\s*\"([^\"]+)\"");
-            if (!shaMatch.Success || !contentMatch.Success) return false;
+            var json = JsonValue.Parse(response);
+            var sha = json["sha"].AsString();
+            var content = json["content"].AsRawString();
+            if (string.IsNullOrEmpty(sha) || string.IsNullOrEmpty(content)) return false;
 
-            var sha = shaMatch.Groups[1].Value;
-            var base64 = contentMatch.Groups[1].Value.Replace("\\n", "");
+            var base64 = content.Replace("\\n", "");
             var existingContent = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(base64));
 
             // 解析并修改
-            var registry = new RegistryJson { name = "Puffin Modules", version = "1.0.0", modules = new List<RegistryModuleEntry>() };
-            ParseRegistryJson(existingContent, registry);
-
+            var registry = ParseRegistryJson(existingContent);
             if (registry.modules.Count == 0)
             {
                 Debug.LogWarning($"[Hub] 解析 registry.json 失败，无法删除版本");
@@ -651,39 +618,55 @@ namespace Puffin.Editor.Hub.Services
                     entry.latest = GetLatestVersion(entry.versions);
             }
 
-            // 生成新 JSON
-            var modulesJson = string.Join(",\n    ", registry.modules.Select(m =>
-            {
-                var updatedPart = !string.IsNullOrEmpty(m.updatedAt) ? $", \"updatedAt\": \"{m.updatedAt}\"" : "";
-                return $"\"{m.id}\": {{ \"latest\": \"{m.latest}\", \"versions\": [{string.Join(", ", m.versions.Select(v => $"\"{v}\""))}]{updatedPart} }}";
-            }));
-            var newContent = $"{{\n  \"name\": \"{registry.name}\",\n  \"version\": \"{registry.version}\",\n  \"modules\": {{\n    {modulesJson}\n  }}\n}}";
-
+            var newContent = BuildRegistryJson(registry);
             var contentBytes = System.Text.Encoding.UTF8.GetBytes(newContent);
             return await UploadFileAsync(owner, repo, branch, "registry.json", contentBytes, token);
         }
 
-        private void ParseRegistryJson(string content, RegistryJson registry)
+        private RegistryJson ParseRegistryJson(string content)
         {
-            var nameMatch = System.Text.RegularExpressions.Regex.Match(content, "\"name\"\\s*:\\s*\"([^\"]+)\"");
-            if (nameMatch.Success) registry.name = nameMatch.Groups[1].Value;
+            var registry = new RegistryJson { name = "Puffin Modules", version = "1.0.0", modules = new List<RegistryModuleEntry>() };
+            var json = JsonValue.Parse(content);
+            registry.name = json["name"].AsString() ?? registry.name;
+            registry.version = json["version"].AsString() ?? registry.version;
 
-            var modulePattern = new System.Text.RegularExpressions.Regex(
-                "\"([^\"]+)\"\\s*:\\s*\\{\\s*\"latest\"\\s*:\\s*\"([^\"]+)\"\\s*,\\s*\"versions\"\\s*:\\s*\\[([^\\]]+)\\](?:\\s*,\\s*\"updatedAt\"\\s*:\\s*\"([^\"]+)\")?");
-            foreach (System.Text.RegularExpressions.Match m in modulePattern.Matches(content))
+            var modules = json["modules"];
+            if (modules.Type == JsonType.Object)
             {
-                var entry = new RegistryModuleEntry
+                var enumerator = modules.GetObjectEnumerator();
+                while (enumerator.MoveNext())
                 {
-                    id = m.Groups[1].Value,
-                    latest = m.Groups[2].Value,
-                    versions = new List<string>(),
-                    updatedAt = m.Groups[4].Success ? m.Groups[4].Value : null
-                };
-                var versionPattern = new System.Text.RegularExpressions.Regex("\"([^\"]+)\"");
-                foreach (System.Text.RegularExpressions.Match v in versionPattern.Matches(m.Groups[3].Value))
-                    entry.versions.Add(v.Groups[1].Value);
-                registry.modules.Add(entry);
+                    var (entryId, moduleData) = enumerator.Current;
+                    registry.modules.Add(new RegistryModuleEntry
+                    {
+                        id = entryId,
+                        latest = moduleData["latest"].AsString(),
+                        versions = moduleData["versions"].ToStringList() ?? new List<string>(),
+                        updatedAt = moduleData["updatedAt"].AsString()
+                    });
+                }
             }
+            return registry;
+        }
+
+        private string BuildRegistryJson(RegistryJson registry)
+        {
+            var builder = new JsonBuilder();
+            builder.BeginObject();
+            builder.Property("name", registry.name);
+            builder.Property("version", registry.version);
+            builder.Key("modules").BeginObject();
+            foreach (var m in registry.modules)
+            {
+                builder.Key(m.id).BeginObject();
+                builder.Property("latest", m.latest);
+                builder.StringArray("versions", m.versions);
+                builder.PropertyIf("updatedAt", m.updatedAt);
+                builder.EndObject();
+            }
+            builder.EndObject();
+            builder.EndObject();
+            return builder.ToString();
         }
 
         [Serializable]

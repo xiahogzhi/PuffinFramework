@@ -11,7 +11,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 9217164488564c148bd5236ea911dc74, type: 3}
   m_Name: PuffinSetting
-  m_EditorClassIdentifier: PuffinFramework.Runtime::Puffin.Runtime.Settings.Puffinettings
+  m_EditorClassIdentifier: PuffinFramework.Runtime::Puffin.Runtime.Settings.PuffinSettings
   scanMode: 0
   requireAutoRegister: 1
   assemblyNames: []

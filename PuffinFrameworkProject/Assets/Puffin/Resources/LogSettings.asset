@@ -11,7 +11,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: da1a3dfe0204b5a45bb2b2e8edd11ebb, type: 3}
   m_Name: LogSettings
-  m_EditorClassIdentifier: PuffinFramework.Runtime::PuffinFrameworks.Runtime.Settings.LogSettings
+  m_EditorClassIdentifier: PuffinFramework.Runtime::Puffin.Runtime.Settings.LogSettings
   globalLogLevel: 1
   enableStackTrace: 1
   enableColors: 1

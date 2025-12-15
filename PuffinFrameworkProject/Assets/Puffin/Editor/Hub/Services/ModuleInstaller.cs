@@ -8,6 +8,7 @@ using Cysharp.Threading.Tasks;
 using Puffin.Editor.Environment;
 using Puffin.Editor.Environment.Core;
 using Puffin.Editor.Hub.Data;
+using Puffin.Runtime.Tools;
 using UnityEditor;
 using UnityEngine;
 
@@ -400,14 +401,15 @@ namespace Puffin.Editor.Hub.Services
 
             // GitHub API 返回 JSON，content 字段是 base64 编码
             var response = request.downloadHandler.text;
-            var contentMatch = System.Text.RegularExpressions.Regex.Match(response, "\"content\"\\s*:\\s*\"([^\"]+)\"");
-            if (!contentMatch.Success)
+            var json = JsonValue.Parse(response);
+            var content = json["content"].AsRawString();
+            if (string.IsNullOrEmpty(content))
             {
                 Debug.LogWarning("[Hub] GitHub API 响应中没有 content 字段");
                 return false;
             }
 
-            var base64Content = contentMatch.Groups[1].Value.Replace("\\n", "");
+            var base64Content = content.Replace("\\n", "");
             var bytes = Convert.FromBase64String(base64Content);
             File.WriteAllBytes(savePath, bytes);
             return true;
