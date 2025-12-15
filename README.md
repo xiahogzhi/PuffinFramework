@@ -580,27 +580,6 @@ Assets/Puffin/Modules/
 }
 ```
 
-## 配置表集成
-
-框架集成了 Luban 配置表工具。
-
-### 配置文件位置
-
-```
-Luban/
-├── luban.conf          # Luban 配置
-├── Defines/            # 表定义
-├── Datas/              # 数据文件
-├── __tables__.xlsx     # 表定义
-├── __beans__.xlsx      # 结构定义
-└── __enums__.xlsx      # 枚举定义
-```
-
-### 生成配置
-
-运行 Luban 生成工具，代码会输出到：
-- 代码：`Assets/Puffin/Modules/LubanConfigModule/Runtime/Generate/`
-- 数据：`Assets/Puffin/Modules/LubanConfigModule/Resources/`
 
 ## 编辑器工具
 
