@@ -1,9 +1,9 @@
 {
-    "moduleId": "UISystemModule",
-    "displayName": "简单UI模块",
-    "version": "1.0.1",
+    "moduleId": "TimerModule",
+    "displayName": "通用计时器模块",
+    "version": "1.0.0",
     "author": "InputName",
-    "description": "简单UI系统模块，支持层级管理，自动设置Mask，动画播放，Pop类型UI，主类型UI，附加UI",
+    "description": "通用计时器",
     "tags": [],
     "unityVersion": "",
     "puffinVersion": "",

@@ -21,4 +21,4 @@ MonoBehaviour:
     enabled: 1
   cacheExpireHours: 24
   useSystemProxy: 1
-  useGitHubApiDownload: 1
+  useGitHubApiDownload: 0

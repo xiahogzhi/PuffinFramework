@@ -27,11 +27,178 @@ namespace Puffin.Editor.Hub.Services
         public event Action<string> OnStatusChanged;
         public event Action<float, long, long, long> OnDownloadProgress; // progress, downloaded, total, speed
 
+        // 下载状态
+        private readonly Dictionary<string, DownloadTask> _downloadTasks = new();
+
+        public class DownloadTask
+        {
+            public string ModuleId;
+            public string Version;
+            public string RegistryId;
+            public string CachePath;
+            public float Progress;
+            public long Downloaded;
+            public long Total;
+            public long Speed;
+            public bool IsCompleted;
+            public bool IsFailed;
+            public string Error;
+        }
+
+        public DownloadTask GetDownloadTask(string moduleId) =>
+            _downloadTasks.TryGetValue(moduleId, out var task) ? task : null;
+
+        public bool IsDownloading(string moduleId) =>
+            _downloadTasks.TryGetValue(moduleId, out var task) && !task.IsCompleted && !task.IsFailed;
+
+        /// <summary>
+        /// 检查模块是否已缓存
+        /// </summary>
+        public bool HasCache(string moduleId, string version)
+        {
+            var cachePath = Path.Combine(HubSettings.CacheDir, $"{moduleId}-{version}.zip");
+            return File.Exists(cachePath);
+        }
+
+        /// <summary>
+        /// 删除模块缓存
+        /// </summary>
+        public void DeleteCache(string moduleId, string version)
+        {
+            var cachePath = Path.Combine(HubSettings.CacheDir, $"{moduleId}-{version}.zip");
+            if (File.Exists(cachePath))
+            {
+                File.Delete(cachePath);
+                Debug.Log($"[Hub] 已删除缓存: {cachePath}");
+            }
+        }
+
+        /// <summary>
+        /// 获取缓存文件大小
+        /// </summary>
+        public long GetCacheSize(string moduleId, string version)
+        {
+            var cachePath = Path.Combine(HubSettings.CacheDir, $"{moduleId}-{version}.zip");
+            if (File.Exists(cachePath))
+                return new FileInfo(cachePath).Length;
+            return 0;
+        }
+
         public ModuleInstaller(RegistryService registry, ModuleResolver resolver)
         {
             _registry = registry;
             _resolver = resolver;
             _depManager = new DependencyManager();
+        }
+
+        /// <summary>
+        /// 仅下载模块（不安装）
+        /// </summary>
+        public async UniTask<bool> DownloadAsync(string moduleId, string version, string registryId)
+        {
+            var task = new DownloadTask
+            {
+                ModuleId = moduleId,
+                Version = version,
+                RegistryId = registryId
+            };
+            _downloadTasks[moduleId] = task;
+
+            try
+            {
+                // 解析依赖
+                var resolveResult = await _resolver.ResolveAsync(moduleId, version, registryId);
+                if (!resolveResult.Success)
+                {
+                    task.IsFailed = true;
+                    task.Error = string.Join("\n", resolveResult.Conflicts);
+                    return false;
+                }
+
+                // 下载所有模块
+                var total = resolveResult.Modules.Count;
+                for (var i = 0; i < total; i++)
+                {
+                    var module = resolveResult.Modules[i];
+                    task.Progress = (float)i / total;
+
+                    // 检查缓存是否已存在（不检查是否安装，因为可能要下载不同版本）
+                    if (HasCache(module.ModuleId, module.Version))
+                    {
+                        Debug.Log($"[Hub] 已有缓存，跳过下载: {module.ModuleId}@{module.Version}");
+                        continue;
+                    }
+
+                    var success = await DownloadSingleModuleAsync(module, task);
+                    if (!success)
+                    {
+                        task.IsFailed = true;
+                        return false;
+                    }
+                }
+
+                task.Progress = 1f;
+                task.IsCompleted = true;
+                return true;
+            }
+            catch (Exception e)
+            {
+                task.IsFailed = true;
+                task.Error = e.Message;
+                Debug.LogError($"[Hub] 下载异常: {e}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 从缓存安装模块（下载完成后调用）
+        /// </summary>
+        public async UniTask<bool> InstallFromCacheAsync(string moduleId, string version, string registryId)
+        {
+            Debug.Log($"[Hub] 从缓存安装: {moduleId}@{version}");
+            try
+            {
+                OnStatusChanged?.Invoke($"正在解析依赖: {moduleId}");
+
+                var resolveResult = await _resolver.ResolveAsync(moduleId, version, registryId);
+                if (!resolveResult.Success)
+                {
+                    foreach (var conflict in resolveResult.Conflicts)
+                        Debug.LogError($"[Hub] {conflict}");
+                    return false;
+                }
+
+                var total = resolveResult.Modules.Count;
+                for (var i = 0; i < total; i++)
+                {
+                    var module = resolveResult.Modules[i];
+                    OnProgress?.Invoke(module.ModuleId, (float)i / total);
+
+                    var modulePath = Path.Combine(Application.dataPath, $"Puffin/Modules/{module.ModuleId}");
+                    if (InstalledModulesLock.Instance.IsInstalled(module.ModuleId) && Directory.Exists(modulePath))
+                        continue;
+
+                    var success = await InstallSingleFromCacheAsync(module);
+                    if (!success)
+                    {
+                        Debug.LogError($"[Hub] 安装失败: {module.ModuleId}");
+                        return false;
+                    }
+                }
+
+                OnProgress?.Invoke(moduleId, 1f);
+                OnStatusChanged?.Invoke("安装完成");
+                AssetDatabase.Refresh();
+
+                // 清理下载任务
+                _downloadTasks.Remove(moduleId);
+                return true;
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[Hub] 安装异常: {e}");
+                return false;
+            }
         }
 
         /// <summary>
@@ -106,37 +273,29 @@ namespace Puffin.Editor.Hub.Services
         /// <summary>
         /// 卸载模块
         /// </summary>
-        public async UniTask<bool> UninstallAsync(string moduleId, bool removeDependents = false)
+        public async UniTask<bool> UninstallAsync(string moduleId)
         {
             try
             {
                 var modulePath = Path.Combine(Application.dataPath, $"Puffin/Modules/{moduleId}");
+                var disabledPath = Path.Combine(HubSettings.DisabledModulesDir, moduleId);
                 var moduleLock = InstalledModulesLock.Instance.GetModule(moduleId);
 
-                // 检查模块是否存在（本地或已安装）
-                if (moduleLock == null && !Directory.Exists(modulePath))
+                // 检查模块是否存在（启用目录、禁用目录或锁定文件）
+                if (moduleLock == null && !Directory.Exists(modulePath) && !Directory.Exists(disabledPath))
                 {
                     Debug.LogWarning($"[Hub] 模块未安装: {moduleId}");
                     return false;
                 }
 
-                // 检查是否有其他模块依赖此模块
-                if (!removeDependents)
-                {
-                    var dependents = FindDependents(moduleId);
-                    if (dependents.Count > 0)
-                    {
-                        Debug.LogWarning($"[Hub] 以下模块依赖 {moduleId}: {string.Join(", ", dependents)}");
-                        return false;
-                    }
-                }
-
                 OnStatusChanged?.Invoke($"正在卸载: {moduleId}");
 
-                // 获取模块的环境依赖（卸载前）
-                var envDeps = GetModuleEnvDependencies(modulePath);
+                // 获取模块的环境依赖（卸载前，优先从启用目录获取）
+                var envDeps = Directory.Exists(modulePath)
+                    ? GetModuleEnvDependencies(modulePath)
+                    : GetModuleEnvDependencies(disabledPath);
 
-                // 删除模块目录
+                // 删除启用目录中的模块
                 if (Directory.Exists(modulePath))
                 {
                     Directory.Delete(modulePath, true);
@@ -145,12 +304,21 @@ namespace Puffin.Editor.Hub.Services
                         File.Delete(metaPath);
                 }
 
+                // 删除禁用目录中的模块
+                if (Directory.Exists(disabledPath))
+                {
+                    Directory.Delete(disabledPath, true);
+                }
+
                 // 更新锁定文件
                 if (moduleLock != null)
                     InstalledModulesLock.Instance.Remove(moduleId);
 
                 // 清理无依赖的环境依赖
                 CleanupOrphanedEnvDependencies(envDeps, moduleId);
+
+                // 禁用依赖此模块的其他模块
+                ModuleDependencyResolver.OnModuleUninstalled(moduleId);
 
                 OnStatusChanged?.Invoke("卸载完成");
                 AssetDatabase.Refresh();
@@ -162,6 +330,155 @@ namespace Puffin.Editor.Hub.Services
                 Debug.LogError($"[Hub] 卸载异常: {e}");
                 return false;
             }
+        }
+
+        /// <summary>
+        /// 禁用模块 - 将模块文件移动到禁用目录
+        /// </summary>
+        /// <param name="moduleId">模块ID</param>
+        /// <param name="isManual">是否是用户手动禁用（手动禁用的模块不会自动启用）</param>
+        public bool DisableModule(string moduleId, bool isManual = false)
+        {
+            try
+            {
+                var modulePath = Path.Combine(Application.dataPath, $"Puffin/Modules/{moduleId}");
+                if (!Directory.Exists(modulePath))
+                {
+                    Debug.LogWarning($"[Hub] 模块不存在: {moduleId}");
+                    return false;
+                }
+
+                var disabledDir = HubSettings.DisabledModulesDir;
+                if (!Directory.Exists(disabledDir))
+                    Directory.CreateDirectory(disabledDir);
+
+                var targetPath = Path.Combine(disabledDir, moduleId);
+                if (Directory.Exists(targetPath))
+                    Directory.Delete(targetPath, true);
+
+                Directory.Move(modulePath, targetPath);
+
+                // 删除 meta 文件
+                var metaPath = modulePath + ".meta";
+                if (File.Exists(metaPath))
+                    File.Delete(metaPath);
+
+                InstalledModulesLock.Instance.SetDisabled(moduleId, true, isManual);
+                AssetDatabase.Refresh();
+                Debug.Log($"[Hub] 模块已禁用: {moduleId}" + (isManual ? " (手动)" : ""));
+                return true;
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[Hub] 禁用模块失败: {e}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 启用模块 - 将模块文件从禁用目录移回
+        /// </summary>
+        public bool EnableModule(string moduleId)
+        {
+            try
+            {
+                var disabledPath = Path.Combine(HubSettings.DisabledModulesDir, moduleId);
+                if (!Directory.Exists(disabledPath))
+                {
+                    Debug.LogWarning($"[Hub] 禁用目录中不存在模块: {moduleId}");
+                    return false;
+                }
+
+                var modulesDir = Path.Combine(Application.dataPath, "Puffin/Modules");
+                if (!Directory.Exists(modulesDir))
+                    Directory.CreateDirectory(modulesDir);
+
+                var targetPath = Path.Combine(modulesDir, moduleId);
+                if (Directory.Exists(targetPath))
+                    Directory.Delete(targetPath, true);
+
+                Directory.Move(disabledPath, targetPath);
+                InstalledModulesLock.Instance.SetDisabled(moduleId, false);
+
+                // 更新程序集依赖引用
+                AsmdefDependencyResolver.ResolveAllModuleDependencies();
+
+                AssetDatabase.Refresh();
+                Debug.Log($"[Hub] 模块已启用: {moduleId}");
+                return true;
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[Hub] 启用模块失败: {e}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 检查模块是否可以启用（所有依赖都已安装且启用）
+        /// </summary>
+        public bool CanEnableModule(string moduleId)
+        {
+            var modulesDir = Path.Combine(Application.dataPath, "Puffin/Modules");
+            var disabledPath = Path.Combine(HubSettings.DisabledModulesDir, moduleId);
+            var manifestPath = Path.Combine(disabledPath, "module.json");
+            if (!File.Exists(manifestPath)) return true;
+
+            try
+            {
+                var json = File.ReadAllText(manifestPath);
+                var manifest = JsonUtility.FromJson<HubModuleManifest>(json);
+                var deps = manifest?.GetAllDependencies();
+                if (deps == null) return true;
+
+                foreach (var dep in deps)
+                {
+                    if (dep.optional) continue;
+                    // 检查依赖模块目录是否存在（启用状态）
+                    var depPath = Path.Combine(modulesDir, dep.moduleId);
+                    if (!Directory.Exists(depPath))
+                        return false;
+                }
+                return true;
+            }
+            catch { return true; }
+        }
+
+        /// <summary>
+        /// 获取模块缺失的依赖
+        /// </summary>
+        public List<string> GetMissingDependencies(string moduleId)
+        {
+            var missing = new List<string>();
+            var modulesDir = Path.Combine(Application.dataPath, "Puffin/Modules");
+            var modulePath = Path.Combine(modulesDir, moduleId);
+            var disabledPath = Path.Combine(HubSettings.DisabledModulesDir, moduleId);
+            var manifestPath = File.Exists(Path.Combine(modulePath, "module.json"))
+                ? Path.Combine(modulePath, "module.json")
+                : Path.Combine(disabledPath, "module.json");
+
+            if (!File.Exists(manifestPath)) return missing;
+
+            try
+            {
+                var json = File.ReadAllText(manifestPath);
+                var manifest = JsonUtility.FromJson<HubModuleManifest>(json);
+                var deps = manifest?.GetAllDependencies();
+                if (deps == null) return missing;
+
+                foreach (var dep in deps)
+                {
+                    if (dep.optional) continue;
+                    // 检查依赖模块目录是否存在（启用状态）
+                    var depPath = Path.Combine(modulesDir, dep.moduleId);
+                    if (!Directory.Exists(depPath))
+                    {
+                        missing.Add(dep.moduleId);
+                    }
+                }
+            }
+            catch { }
+            return missing;
         }
 
         /// <summary>
@@ -236,10 +553,164 @@ namespace Puffin.Editor.Hub.Services
             }
 
             // 先卸载再安装
-            var success = await UninstallAsync(moduleId, false);
+            var success = await UninstallAsync(moduleId);
             if (!success) return false;
 
             return await InstallAsync(moduleId, targetVersion, moduleLock.registryId);
+        }
+
+        /// <summary>
+        /// 仅下载单个模块（后台下载用）
+        /// </summary>
+        private async UniTask<bool> DownloadSingleModuleAsync(ResolvedModule module, DownloadTask task)
+        {
+            var registry = HubSettings.Instance.registries.Find(r => r.id == module.RegistryId);
+            if (registry == null) return false;
+
+            var manifest = module.Manifest;
+            var downloadUrl = string.IsNullOrEmpty(manifest.downloadUrl)
+                ? registry.GetDownloadUrl(module.ModuleId, module.Version, $"{module.ModuleId}-{module.Version}.zip")
+                : manifest.downloadUrl.StartsWith("http")
+                    ? manifest.downloadUrl
+                    : registry.GetDownloadUrl(module.ModuleId, module.Version, manifest.downloadUrl);
+
+            var cacheDir = HubSettings.CacheDir;
+            if (!Directory.Exists(cacheDir))
+                Directory.CreateDirectory(cacheDir);
+
+            var cachePath = Path.Combine(cacheDir, $"{module.ModuleId}-{module.Version}.zip");
+            task.CachePath = cachePath;
+
+            // 检查缓存
+            if (File.Exists(cachePath) && !string.IsNullOrEmpty(manifest.checksum))
+            {
+                if (VerifyChecksum(cachePath, manifest.checksum, out _))
+                {
+                    Debug.Log($"[Hub] 使用缓存: {cachePath}");
+                    return true;
+                }
+                File.Delete(cachePath);
+            }
+
+            // 下载
+            bool downloaded;
+            if (HubSettings.Instance.useGitHubApiDownload && registry.IsGitHubRepo)
+            {
+                var filePath = $"modules/{module.ModuleId}/{module.Version}/{module.ModuleId}-{module.Version}.zip";
+                var apiUrl = registry.GetFileApiUrl(filePath);
+                downloaded = await DownloadViaGitHubApiAsync(apiUrl, cachePath, registry.authToken);
+            }
+            else
+            {
+                var downloader = new Downloader();
+                downloader.OnProgress += (p, dl, total, speed) =>
+                {
+                    task.Progress = p;
+                    task.Downloaded = dl;
+                    task.Total = total;
+                    task.Speed = speed;
+                };
+                downloaded = await downloader.DownloadAsync(downloadUrl, cachePath);
+            }
+
+            if (!downloaded)
+            {
+                task.Error = $"下载失败: {downloadUrl}";
+                Debug.LogError($"[Hub] {task.Error}");
+                return false;
+            }
+
+            // 验证校验和
+            if (!string.IsNullOrEmpty(manifest.checksum))
+            {
+                if (!VerifyChecksum(cachePath, manifest.checksum, out var actualChecksum))
+                {
+                    task.Error = $"校验和不匹配: {module.ModuleId}";
+                    Debug.LogError($"[Hub] 校验和不匹配\n  期望: {manifest.checksum}\n  实际: sha256:{actualChecksum}");
+                    File.Delete(cachePath);
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// 从缓存安装单个模块
+        /// </summary>
+        private async UniTask<bool> InstallSingleFromCacheAsync(ResolvedModule module)
+        {
+            OnStatusChanged?.Invoke($"正在安装: {module.ModuleId}@{module.Version}");
+
+            var registry = HubSettings.Instance.registries.Find(r => r.id == module.RegistryId);
+            if (registry == null) return false;
+
+            var manifest = module.Manifest;
+
+            // 1. 安装环境依赖
+            if (manifest.envDependencies != null && manifest.envDependencies.Length > 0)
+            {
+                foreach (var envDep in manifest.envDependencies)
+                {
+                    if (envDep.optional) continue;
+                    var depDef = ConvertToDepDefinition(envDep);
+                    if (!_depManager.IsInstalled(depDef))
+                    {
+                        var success = await _depManager.InstallAsync(depDef);
+                        if (!success)
+                        {
+                            Debug.LogError($"[Hub] 环境依赖安装失败: {envDep.id}");
+                            return false;
+                        }
+                    }
+                }
+            }
+
+            // 2. 从缓存解压
+            var cachePath = Path.Combine(HubSettings.CacheDir, $"{module.ModuleId}-{module.Version}.zip");
+            if (!File.Exists(cachePath))
+            {
+                Debug.LogError($"[Hub] 缓存文件不存在: {cachePath}");
+                return false;
+            }
+
+            var destPath = Path.Combine(Application.dataPath, $"Puffin/Modules/{module.ModuleId}");
+            if (Directory.Exists(destPath))
+                Directory.Delete(destPath, true);
+
+            OnStatusChanged?.Invoke($"正在解压: {module.ModuleId}");
+            Extractor.Extract(cachePath, destPath);
+
+            // 3. 更新锁定文件
+            var lockEntry = new InstalledModuleLock
+            {
+                moduleId = module.ModuleId,
+                version = module.Version,
+                registryId = module.RegistryId,
+                checksum = manifest.checksum,
+                installedAt = DateTime.Now.ToString("o"),
+                resolvedDependencies = new List<string>()
+            };
+
+            if (manifest.dependencies != null)
+                foreach (var dep in manifest.dependencies)
+                    lockEntry.resolvedDependencies.Add(dep);
+
+            InstalledModulesLock.Instance.AddOrUpdate(lockEntry);
+
+            // 4. 更新程序集引用
+            try
+            {
+                var deps = manifest.GetAllDependencies();
+                AsmdefDependencyResolver.UpdateModuleAsmdefReferences(module.ModuleId, destPath, deps);
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[Hub] 更新程序集引用失败: {e.Message}");
+            }
+
+            Debug.Log($"[Hub] 安装成功: {module.ModuleId}@{module.Version}");
+            return true;
         }
 
         private async UniTask<bool> InstallSingleModuleAsync(ResolvedModule module)
@@ -284,27 +755,46 @@ namespace Puffin.Editor.Hub.Services
 
             var cachePath = Path.Combine(cacheDir, $"{module.ModuleId}-{module.Version}.zip");
 
-            OnStatusChanged?.Invoke($"正在下载: {module.ModuleId}");
-            bool downloaded;
-
-            // 使用 GitHub API 下载（绕过 CDN 缓存）
-            if (HubSettings.Instance.useGitHubApiDownload && registry.IsGitHubRepo)
+            // 检查缓存是否存在且校验和匹配
+            var useCache = false;
+            if (File.Exists(cachePath) && !string.IsNullOrEmpty(manifest.checksum))
             {
-                var filePath = $"modules/{module.ModuleId}/{module.Version}/{module.ModuleId}-{module.Version}.zip";
-                var apiUrl = registry.GetFileApiUrl(filePath);
-                downloaded = await DownloadViaGitHubApiAsync(apiUrl, cachePath, registry.authToken);
+                if (VerifyChecksum(cachePath, manifest.checksum, out _))
+                {
+                    Debug.Log($"[Hub] 使用缓存: {cachePath}");
+                    useCache = true;
+                }
+                else
+                {
+                    Debug.Log($"[Hub] 缓存校验和不匹配，重新下载");
+                    File.Delete(cachePath);
+                }
             }
-            else
-            {
-                var downloader = new Downloader();
-                downloader.OnProgress += (p, dl, total, speed) => OnDownloadProgress?.Invoke(p, dl, total, speed);
-                downloaded = await downloader.DownloadAsync(downloadUrl, cachePath);
-            }
 
-            if (!downloaded)
+            if (!useCache)
             {
-                Debug.LogError($"[Hub] 下载失败: {downloadUrl}");
-                return false;
+                OnStatusChanged?.Invoke($"正在下载: {module.ModuleId}");
+                bool downloaded;
+
+                // 使用 GitHub API 下载（绕过 CDN 缓存）
+                if (HubSettings.Instance.useGitHubApiDownload && registry.IsGitHubRepo)
+                {
+                    var filePath = $"modules/{module.ModuleId}/{module.Version}/{module.ModuleId}-{module.Version}.zip";
+                    var apiUrl = registry.GetFileApiUrl(filePath);
+                    downloaded = await DownloadViaGitHubApiAsync(apiUrl, cachePath, registry.authToken);
+                }
+                else
+                {
+                    var downloader = new Downloader();
+                    downloader.OnProgress += (p, dl, total, speed) => OnDownloadProgress?.Invoke(p, dl, total, speed);
+                    downloaded = await downloader.DownloadAsync(downloadUrl, cachePath);
+                }
+
+                if (!downloaded)
+                {
+                    Debug.LogError($"[Hub] 下载失败: {downloadUrl}");
+                    return false;
+                }
             }
 
             // 3. 验证校验和

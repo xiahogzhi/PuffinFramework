@@ -26,6 +26,7 @@ namespace Puffin.Editor.Hub.Services
         {
             // 只执行一次
             EditorApplication.delayCall -= OnEditorReady;
+            ResolveAllModuleDependencies();
             ResolveAllEnvDependencies();
         }
 
@@ -61,35 +62,80 @@ namespace Puffin.Editor.Hub.Services
         {
             dependencies ??= new List<ModuleDependency>();
 
-            // 构建需要的依赖引用
+            // 构建需要的依赖引用（支持两种命名格式）
             var runtimeDepRefs = new List<string>();
             var editorDepRefs = new List<string>();
             foreach (var dep in dependencies)
             {
                 if (!dep.optional)
                 {
-                    runtimeDepRefs.Add($"PuffinFramework.{dep.moduleId}.Runtime");
-                    editorDepRefs.Add($"PuffinFramework.{dep.moduleId}.Runtime");
-                    if (HasEditorAssembly(dep.moduleId))
-                        editorDepRefs.Add($"PuffinFramework.{dep.moduleId}.Editor");
+                    // 获取依赖模块的实际程序集名称
+                    var depRuntimeName = GetModuleRuntimeAssemblyName(dep.moduleId);
+                    var depEditorName = GetModuleEditorAssemblyName(dep.moduleId);
+
+                    if (!string.IsNullOrEmpty(depRuntimeName))
+                    {
+                        runtimeDepRefs.Add(depRuntimeName);
+                        editorDepRefs.Add(depRuntimeName);
+                    }
+                    if (!string.IsNullOrEmpty(depEditorName))
+                        editorDepRefs.Add(depEditorName);
                 }
             }
 
-            // 更新 Runtime asmdef（保留现有配置）
-            var runtimeAsmdefPath = Path.Combine(modulePath, "Runtime", $"PuffinFramework.{moduleId}.Runtime.asmdef");
-            if (File.Exists(runtimeAsmdefPath))
+            // 查找 Runtime asmdef（支持多种命名格式）
+            var runtimeAsmdefPath = FindAsmdefInDir(Path.Combine(modulePath, "Runtime"));
+            if (!string.IsNullOrEmpty(runtimeAsmdefPath))
             {
                 var baseRefs = new[] { "PuffinFramework.Runtime" };
                 UpdateAsmdefReferences(runtimeAsmdefPath, baseRefs, runtimeDepRefs);
             }
 
-            // 更新 Editor asmdef（保留现有配置）
-            var editorAsmdefPath = Path.Combine(modulePath, "Editor", $"PuffinFramework.{moduleId}.Editor.asmdef");
-            if (File.Exists(editorAsmdefPath))
+            // 查找 Editor asmdef
+            var editorAsmdefPath = FindAsmdefInDir(Path.Combine(modulePath, "Editor"));
+            if (!string.IsNullOrEmpty(editorAsmdefPath))
             {
-                var baseRefs = new[] { "PuffinFramework.Runtime", $"PuffinFramework.{moduleId}.Runtime", "PuffinFramework.Editor" };
+                // 获取当前模块的 Runtime 程序集名称
+                var selfRuntimeName = !string.IsNullOrEmpty(runtimeAsmdefPath)
+                    ? Path.GetFileNameWithoutExtension(runtimeAsmdefPath)
+                    : $"{moduleId}.Runtime";
+                var baseRefs = new[] { "PuffinFramework.Runtime", selfRuntimeName, "PuffinFramework.Editor" };
                 UpdateAsmdefReferences(editorAsmdefPath, baseRefs, editorDepRefs);
             }
+        }
+
+        /// <summary>
+        /// 在目录中查找 asmdef 文件
+        /// </summary>
+        private static string FindAsmdefInDir(string dir)
+        {
+            if (!Directory.Exists(dir)) return null;
+            var files = Directory.GetFiles(dir, "*.asmdef", SearchOption.TopDirectoryOnly);
+            return files.Length > 0 ? files[0] : null;
+        }
+
+        /// <summary>
+        /// 获取模块的 Runtime 程序集名称
+        /// </summary>
+        private static string GetModuleRuntimeAssemblyName(string moduleId)
+        {
+            var modulePath = Path.Combine(Application.dataPath, $"Puffin/Modules/{moduleId}");
+            var runtimeDir = Path.Combine(modulePath, "Runtime");
+            var asmdefPath = FindAsmdefInDir(runtimeDir);
+            if (string.IsNullOrEmpty(asmdefPath)) return null;
+            return Path.GetFileNameWithoutExtension(asmdefPath);
+        }
+
+        /// <summary>
+        /// 获取模块的 Editor 程序集名称
+        /// </summary>
+        private static string GetModuleEditorAssemblyName(string moduleId)
+        {
+            var modulePath = Path.Combine(Application.dataPath, $"Puffin/Modules/{moduleId}");
+            var editorDir = Path.Combine(modulePath, "Editor");
+            var asmdefPath = FindAsmdefInDir(editorDir);
+            if (string.IsNullOrEmpty(asmdefPath)) return null;
+            return Path.GetFileNameWithoutExtension(asmdefPath);
         }
 
         /// <summary>
@@ -172,18 +218,22 @@ namespace Puffin.Editor.Hub.Services
             var modulePath = Path.Combine(Application.dataPath, $"Puffin/Modules/{moduleId}");
             if (!Directory.Exists(modulePath)) return;
 
+            var depRuntimeName = GetModuleRuntimeAssemblyName(dependencyId);
+            var depEditorName = GetModuleEditorAssemblyName(dependencyId);
+
             // 更新 Runtime asmdef
-            var runtimeAsmdefPath = Path.Combine(modulePath, "Runtime", $"PuffinFramework.{moduleId}.Runtime.asmdef");
-            if (File.Exists(runtimeAsmdefPath))
-                AddReference(runtimeAsmdefPath, $"PuffinFramework.{dependencyId}.Runtime");
+            var runtimeAsmdefPath = FindAsmdefInDir(Path.Combine(modulePath, "Runtime"));
+            if (!string.IsNullOrEmpty(runtimeAsmdefPath) && !string.IsNullOrEmpty(depRuntimeName))
+                AddReference(runtimeAsmdefPath, depRuntimeName);
 
             // 更新 Editor asmdef
-            var editorAsmdefPath = Path.Combine(modulePath, "Editor", $"PuffinFramework.{moduleId}.Editor.asmdef");
-            if (File.Exists(editorAsmdefPath))
+            var editorAsmdefPath = FindAsmdefInDir(Path.Combine(modulePath, "Editor"));
+            if (!string.IsNullOrEmpty(editorAsmdefPath))
             {
-                AddReference(editorAsmdefPath, $"PuffinFramework.{dependencyId}.Runtime");
-                if (HasEditorAssembly(dependencyId))
-                    AddReference(editorAsmdefPath, $"PuffinFramework.{dependencyId}.Editor");
+                if (!string.IsNullOrEmpty(depRuntimeName))
+                    AddReference(editorAsmdefPath, depRuntimeName);
+                if (!string.IsNullOrEmpty(depEditorName))
+                    AddReference(editorAsmdefPath, depEditorName);
             }
 
             AssetDatabase.Refresh();
@@ -197,17 +247,22 @@ namespace Puffin.Editor.Hub.Services
             var modulePath = Path.Combine(Application.dataPath, $"Puffin/Modules/{moduleId}");
             if (!Directory.Exists(modulePath)) return;
 
+            var depRuntimeName = GetModuleRuntimeAssemblyName(dependencyId);
+            var depEditorName = GetModuleEditorAssemblyName(dependencyId);
+
             // 更新 Runtime asmdef
-            var runtimeAsmdefPath = Path.Combine(modulePath, "Runtime", $"PuffinFramework.{moduleId}.Runtime.asmdef");
-            if (File.Exists(runtimeAsmdefPath))
-                RemoveReference(runtimeAsmdefPath, $"PuffinFramework.{dependencyId}.Runtime");
+            var runtimeAsmdefPath = FindAsmdefInDir(Path.Combine(modulePath, "Runtime"));
+            if (!string.IsNullOrEmpty(runtimeAsmdefPath) && !string.IsNullOrEmpty(depRuntimeName))
+                RemoveReference(runtimeAsmdefPath, depRuntimeName);
 
             // 更新 Editor asmdef
-            var editorAsmdefPath = Path.Combine(modulePath, "Editor", $"PuffinFramework.{moduleId}.Editor.asmdef");
-            if (File.Exists(editorAsmdefPath))
+            var editorAsmdefPath = FindAsmdefInDir(Path.Combine(modulePath, "Editor"));
+            if (!string.IsNullOrEmpty(editorAsmdefPath))
             {
-                RemoveReference(editorAsmdefPath, $"PuffinFramework.{dependencyId}.Runtime");
-                RemoveReference(editorAsmdefPath, $"PuffinFramework.{dependencyId}.Editor");
+                if (!string.IsNullOrEmpty(depRuntimeName))
+                    RemoveReference(editorAsmdefPath, depRuntimeName);
+                if (!string.IsNullOrEmpty(depEditorName))
+                    RemoveReference(editorAsmdefPath, depEditorName);
             }
 
             AssetDatabase.Refresh();

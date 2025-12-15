@@ -1,8 +1,9 @@
 {
-    "name": "UISystemModule.Runtime",
+    "name": "t.Runtime",
     "rootNamespace": "",
     "references": [
-        "PuffinFramework.Runtime"
+        "PuffinFramework.Runtime",
+        "TimerModule.Runtime"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

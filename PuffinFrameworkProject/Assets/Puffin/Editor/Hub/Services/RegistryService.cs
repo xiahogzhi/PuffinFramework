@@ -21,58 +21,82 @@ namespace Puffin.Editor.Hub.Services
         private readonly Dictionary<string, HubModuleManifest> _manifestCache = new();
 
         /// <summary>
-        /// 获取已安装的模块列表
+        /// 获取已安装的模块列表（包括禁用的模块）
         /// </summary>
         public List<HubModuleInfo> GetInstalledModules()
         {
             var result = new List<HubModuleInfo>();
+            var addedIds = new HashSet<string>();
+
+            // 扫描启用的模块目录（优先）
             var modulesPath = Path.Combine(UnityEngine.Application.dataPath, "Puffin/Modules");
-
-            if (!Directory.Exists(modulesPath))
-                return result;
-
-            foreach (var dir in Directory.GetDirectories(modulesPath))
+            if (Directory.Exists(modulesPath))
             {
-                var folderName = Path.GetFileName(dir);
-
-                // 验证是否为有效模块
-                if (!IsValidModule(dir))
-                    continue;
-
-                var moduleJsonPath = Path.Combine(dir, "module.json");
-                var json = File.ReadAllText(moduleJsonPath);
-                var manifest = UnityEngine.JsonUtility.FromJson<HubModuleManifest>(json);
-
-                var moduleId = manifest?.moduleId ?? folderName;
-                var version = manifest?.version;
-                var displayName = manifest?.displayName ?? moduleId;
-
-                // 从锁定文件获取来源信息
-                var lockInfo = InstalledModulesLock.Instance.GetModule(moduleId);
-                var sourceRegistryId = lockInfo?.registryId;
-                var sourceRegistry = sourceRegistryId != null
-                    ? HubSettings.Instance.registries.Find(r => r.id == sourceRegistryId)
-                    : null;
-
-                result.Add(new HubModuleInfo
+                foreach (var dir in Directory.GetDirectories(modulesPath))
                 {
-                    ModuleId = moduleId,
-                    DisplayName = displayName,
-                    Description = manifest?.description,
-                    LatestVersion = version,
-                    InstalledVersion = version,
-                    RegistryId = sourceRegistryId ?? "local",
-                    SourceRegistryId = sourceRegistryId,
-                    SourceRegistryName = sourceRegistry?.name,
-                    IsInstalled = true,
-                    IsLocal = sourceRegistryId == null,
-                    HasUpdate = false,
-                    Manifest = manifest,
-                    LoadState = ModuleLoadState.Loaded  // 已安装模块已有本地 manifest
-                });
+                    var info = CreateModuleInfoFromDir(dir, false);
+                    if (info != null && addedIds.Add(info.ModuleId))
+                        result.Add(info);
+                }
+            }
+
+            // 扫描禁用的模块目录（跳过已添加的）
+            var disabledPath = HubSettings.DisabledModulesDir;
+            if (Directory.Exists(disabledPath))
+            {
+                foreach (var dir in Directory.GetDirectories(disabledPath))
+                {
+                    var info = CreateModuleInfoFromDir(dir, true);
+                    if (info != null && addedIds.Add(info.ModuleId))
+                        result.Add(info);
+                }
             }
 
             return result;
+        }
+
+        private HubModuleInfo CreateModuleInfoFromDir(string dir, bool isDisabled)
+        {
+            var folderName = Path.GetFileName(dir);
+
+            // 验证是否为有效模块
+            if (!IsValidModule(dir))
+                return null;
+
+            var moduleJsonPath = Path.Combine(dir, "module.json");
+            var json = File.ReadAllText(moduleJsonPath);
+            var manifest = UnityEngine.JsonUtility.FromJson<HubModuleManifest>(json);
+
+            var moduleId = manifest?.moduleId ?? folderName;
+            var version = manifest?.version;
+            var displayName = manifest?.displayName ?? moduleId;
+
+            // 从锁定文件获取来源信息
+            var lockInfo = InstalledModulesLock.Instance.GetModule(moduleId);
+            var sourceRegistryId = lockInfo?.registryId;
+            var sourceRegistry = sourceRegistryId != null
+                ? HubSettings.Instance.registries.Find(r => r.id == sourceRegistryId)
+                : null;
+
+            return new HubModuleInfo
+            {
+                ModuleId = moduleId,
+                DisplayName = displayName,
+                Description = manifest?.description,
+                Author = manifest?.author,
+                Tags = manifest?.tags,
+                ReleaseNotes = manifest?.releaseNotes,
+                Dependencies = manifest?.dependencies,
+                LatestVersion = version,
+                InstalledVersion = version,
+                RegistryId = sourceRegistryId ?? "local",
+                SourceRegistryId = sourceRegistryId,
+                SourceRegistryName = sourceRegistry?.name ?? "本地",
+                IsInstalled = true,
+                HasUpdate = false,
+                Manifest = manifest,
+                LoadState = ModuleLoadState.Loaded
+            };
         }
 
         /// <summary>
@@ -130,8 +154,6 @@ namespace Puffin.Editor.Hub.Services
                         RegistryId = registry.id,
                         InstalledVersion = installedVersion,
                         IsInstalled = isInstalled,
-                        IsLocal = false,
-                        HasRemote = true,
                         SourceRegistryId = isInstalled ? registry.id : null,
                         SourceRegistryName = isInstalled ? registry.name : null,
                         Versions = versionInfo.versions ?? new List<string> { versionInfo.latest },
@@ -215,10 +237,10 @@ namespace Puffin.Editor.Hub.Services
                 result.AddRange(remoteModules);
             }
 
-            // 添加仅本地的模块（没有远程来源的）
+            // 添加没有在远程仓库中找到的已安装模块
             foreach (var local in installedModules)
             {
-                if (local.IsLocal)
+                if (!result.Exists(m => m.ModuleId == local.ModuleId))
                     result.Add(local);
             }
 

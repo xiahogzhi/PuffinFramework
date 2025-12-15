@@ -157,7 +157,7 @@ namespace Puffin.Editor.Hub.Data
         public string Description;
         public string LatestVersion;      // 远程最新版本
         public string InstalledVersion;   // 本地安装版本
-        public string RemoteVersion;      // 远程版本（用于本地模块比较）
+        public string RemoteVersion;      // 远程版本（用于比较）
         public string[] Tags;
         public string Author;
         public string RegistryId;         // 所属仓库ID（远程模块用）
@@ -165,8 +165,6 @@ namespace Puffin.Editor.Hub.Data
         public string SourceRegistryName; // 安装来源仓库名称
         public bool IsInstalled;
         public bool HasUpdate;
-        public bool IsLocal;              // 仅本地存在（无远程匹配）
-        public bool HasRemote;            // 是否有远程版本
         public List<string> Versions;     // 所有可用版本
         public string ReleaseNotes;       // 当前版本的更新日志
         public List<string> Dependencies; // 依赖列表

@@ -57,6 +57,8 @@ namespace Puffin.Editor.Hub.UI
             var search = _depSearchText?.ToLower() ?? "";
             foreach (var m in _availableModules)
             {
+                // 只显示已安装的模块（包括禁用的）
+                if (!m.IsInstalled) continue;
                 if (_dependencies.Exists(d => d.moduleId == m.ModuleId)) continue;
                 if (string.IsNullOrEmpty(search) || m.ModuleId.ToLower().Contains(search) || (m.DisplayName?.ToLower().Contains(search) ?? false))
                     _filteredDepModules.Add(m);
@@ -263,7 +265,7 @@ namespace Puffin.Editor.Hub.UI
             EditorGUILayout.BeginHorizontal();
             GUILayout.Space(20);
 
-            var registryName = m.SourceRegistryName ?? m.RegistryId ?? (m.IsLocal ? "本地" : "");
+            var registryName = m.SourceRegistryName ?? m.RegistryId ?? "";
             var displayText = $"{m.ModuleId} v{m.LatestVersion ?? m.InstalledVersion}";
             if (!string.IsNullOrEmpty(registryName)) displayText += $" [{registryName}]";
 
