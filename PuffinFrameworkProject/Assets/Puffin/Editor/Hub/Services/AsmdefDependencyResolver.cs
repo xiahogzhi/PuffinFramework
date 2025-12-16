@@ -30,13 +30,13 @@ namespace Puffin.Editor.Hub.Services
             ResolveAllEnvDependencies();
         }
 
-        [MenuItem("Puffin Framework/解析程序集引用")]
-        public static void ResolveReferencesMenu()
-        {
-            ResolveAllModuleDependencies();
-            ResolveAllEnvDependencies();
-            Debug.Log("[AsmdefResolver] 程序集引用解析完成");
-        }
+        // [MenuItem("Puffin Framework/解析程序集引用")]
+        // public static void ResolveReferencesMenu()
+        // {
+        //     ResolveAllModuleDependencies();
+        //     ResolveAllEnvDependencies();
+        //     Debug.Log("[AsmdefResolver] 程序集引用解析完成");
+        // }
 
         [Serializable]
         private class AsmdefData
@@ -207,7 +207,7 @@ namespace Puffin.Editor.Hub.Services
             }
 
             AssetDatabase.Refresh();
-            Debug.Log("[AsmdefResolver] 程序集依赖解析完成");
+            // Debug.Log("[AsmdefResolver] 程序集依赖解析完成");
         }
 
         /// <summary>

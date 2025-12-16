@@ -363,7 +363,7 @@ namespace Puffin.Editor.Hub.UI
                         EditorGUILayout.EndHorizontal();
                     }
 
-                    if (toRemove != null && EditorUtility.DisplayDialog("删除仓库", $"确定删除 {toRemove.name}？", "删除", "取消"))
+                    if (toRemove != null && EditorDialog.DisplayDecisionDialog("删除仓库", $"确定删除 {toRemove.name}？", "删除", "取消", DialogIconType.Warning))
                     {
                         HubSettings.Instance.registries.Remove(toRemove);
                         EditorUtility.SetDirty(HubSettings.Instance);
@@ -478,11 +478,6 @@ namespace Puffin.Editor.Hub.UI
         private void DrawModuleItem(HubModuleInfo module)
         {
             var isSelected = _selectedModule == module;
-            // 检查模块是否实际启用（在 Puffin/Modules 目录中）
-            var modulePath = System.IO.Path.Combine(Application.dataPath, $"Puffin/Modules/{module.ModuleId}");
-            var isActuallyEnabled = !module.IsInstalled || System.IO.Directory.Exists(modulePath);
-            var isManuallyDisabled = module.IsInstalled && InstalledModulesLock.Instance.IsManuallyDisabled(module.ModuleId);
-            var isSystemDisabled = module.IsInstalled && !isActuallyEnabled && !isManuallyDisabled;
             var bgColor = isSelected ? new Color(0.24f, 0.49f, 0.91f, 0.5f) : Color.clear;
 
             var rect = EditorGUILayout.BeginVertical(GUI.skin.box);
@@ -496,60 +491,15 @@ namespace Puffin.Editor.Hub.UI
 
                 EditorGUILayout.BeginHorizontal();
                 {
-                    // 已安装模块显示启用勾选框
-                    if (module.IsInstalled)
-                    {
-                        // 系统禁用的模块不显示勾选框
-                        if (isSystemDisabled)
-                        {
-                            GUILayout.Space(20);
-                        }
-                        else
-                        {
-                            var canEnable = isActuallyEnabled || _installer.CanEnableModule(module.ModuleId);
-
-                            EditorGUI.BeginDisabledGroup(!canEnable && !isActuallyEnabled);
-                            var newEnabled = EditorGUILayout.Toggle(isActuallyEnabled, GUILayout.Width(16));
-                            EditorGUI.EndDisabledGroup();
-
-                            if (newEnabled != isActuallyEnabled)
-                            {
-                                bool success;
-                                if (newEnabled)
-                                {
-                                    // 启用模块
-                                    success = _installer.EnableModule(module.ModuleId);
-                                }
-                                else
-                                {
-                                    // 禁用模块（用户手动禁用，不会自动启用）
-                                    success = _installer.DisableModule(module.ModuleId, true);
-                                }
-
-                                if (success)
-                                {
-                                    // 延迟刷新，避免在 OnGUI 中直接刷新
-                                    EditorApplication.delayCall += () => RefreshModulesAsync().Forget();
-                                }
-                            }
-                        }
-                    }
-                    else
-                    {
-                        GUILayout.Space(20);
-                    }
+                    GUILayout.Space(20);
 
                     // 根据加载状态显示不同图标
                     var icon = module.LoadState == ModuleLoadState.Loading ? "⏳" :
                         module.LoadState == ModuleLoadState.Failed ? "⚠" : "📦";
-                    var iconStyle = new GUIStyle(EditorStyles.label);
-                    if (!isActuallyEnabled) iconStyle.normal.textColor = Color.gray;
-                    EditorGUILayout.LabelField(icon, iconStyle, GUILayout.Width(18));
+                    EditorGUILayout.LabelField(icon, GUILayout.Width(18));
 
                     var displayText = GetModuleDisplayText(module);
-                    var nameStyle = new GUIStyle(EditorStyles.boldLabel);
-                    if (!isActuallyEnabled) nameStyle.normal.textColor = Color.gray;
-                    EditorGUILayout.LabelField(displayText, nameStyle);
+                    EditorGUILayout.LabelField(displayText, EditorStyles.boldLabel);
                     GUILayout.FlexibleSpace();
 
                     // 加载失败时显示重试按钮
@@ -577,8 +527,7 @@ namespace Puffin.Editor.Hub.UI
                     }
                     else if (module.IsInstalled)
                     {
-                        var style = new GUIStyle(EditorStyles.miniLabel)
-                            { normal = { textColor = isActuallyEnabled ? Color.green : Color.gray } };
+                        var style = new GUIStyle(EditorStyles.miniLabel) { normal = { textColor = Color.green } };
 
                         // 检查是否是当前选中的模块且选择了不同版本
                         var showVersionChange = _selectedModule == module &&
@@ -608,16 +557,7 @@ namespace Puffin.Editor.Hub.UI
                 if (module.IsInstalled)
                 {
                     var sourceName = !string.IsNullOrEmpty(module.SourceRegistryName) ? module.SourceRegistryName : "本地";
-                    string sourceText;
-                    if (isSystemDisabled)
-                        sourceText = $"来源: {sourceName} [缺少依赖]";
-                    else if (!isActuallyEnabled)
-                        sourceText = $"来源: {sourceName} [已禁用]";
-                    else
-                        sourceText = $"来源: {sourceName}";
-                    var sourceStyle = new GUIStyle(EditorStyles.miniLabel);
-                    if (!isActuallyEnabled) sourceStyle.normal.textColor = Color.gray;
-                    EditorGUILayout.LabelField(sourceText, sourceStyle);
+                    EditorGUILayout.LabelField($"来源: {sourceName}", EditorStyles.miniLabel);
                 }
             }
             EditorGUILayout.EndVertical();
@@ -696,12 +636,10 @@ namespace Puffin.Editor.Hub.UI
                             GUILayout.FlexibleSpace();
                             if (_selectedModule.IsInstalled)
                             {
-                                // 获取模块实际路径（可能在启用或禁用目录）
-                                var modulePath = GetInstalledModulePath(_selectedModule.ModuleId);
-                                var isEnabled = modulePath != null && modulePath.Contains("Puffin/Modules");
+                                var modulePath = System.IO.Path.Combine(Application.dataPath, $"Puffin/Modules/{_selectedModule.ModuleId}");
 
-                                // 定位（仅启用的模块可定位到 Assets）
-                                if (isEnabled && GUILayout.Button("📍", GUILayout.Width(22), GUILayout.Height(18)))
+                                // 定位
+                                if (GUILayout.Button("📍", GUILayout.Width(22), GUILayout.Height(18)))
                                 {
                                     var assetPath = $"Assets/Puffin/Modules/{_selectedModule.ModuleId}";
                                     var obj = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(assetPath);
@@ -714,31 +652,27 @@ namespace Puffin.Editor.Hub.UI
                                 // 编辑（本地模块或有token的远程模块）
                                 var registryId = !string.IsNullOrEmpty(_selectedModule.SourceRegistryId) ? _selectedModule.SourceRegistryId : _selectedModule.RegistryId;
                                 var isLocal = registryId == "local" || string.IsNullOrEmpty(registryId);
-                                if ((isLocal || HubSettings.Instance.HasToken(registryId)) && modulePath != null && GUILayout.Button("✏", GUILayout.Width(22), GUILayout.Height(18)))
+                                if ((isLocal || HubSettings.Instance.HasToken(registryId)) && GUILayout.Button("✏", GUILayout.Width(22), GUILayout.Height(18)))
                                 {
                                     EditModuleWindow.Show(modulePath, GetAllAvailableModules(), () => RefreshModulesAsync().Forget());
                                 }
                                 // 上传（本地模块或有token的远程模块）
-                                if ((isLocal || HubSettings.Instance.HasToken(registryId)) && modulePath != null && GUILayout.Button("⬆", GUILayout.Width(22), GUILayout.Height(18)))
+                                if ((isLocal || HubSettings.Instance.HasToken(registryId)) && GUILayout.Button("⬆", GUILayout.Width(22), GUILayout.Height(18)))
                                 {
                                     PublishModuleWindow.ShowWithPath(modulePath);
                                 }
                                 // 导出
-                                if (modulePath != null && GUILayout.Button("📦", GUILayout.Width(22), GUILayout.Height(18)))
+                                if (GUILayout.Button("📦", GUILayout.Width(22), GUILayout.Height(18)))
                                     ExportPackage(_selectedModule);
                             }
                             else
                             {
                                 // 未安装模块：删除远程版本（有token）
-                                if (HubSettings.Instance.HasToken(_selectedModule.RegistryId) && GUILayout.Button("🗑", GUILayout.Width(22), GUILayout.Height(18)))
+                                var delRegistry = HubSettings.Instance.registries.Find(r => r.id == _selectedModule.RegistryId);
+                                if (delRegistry != null && !string.IsNullOrEmpty(delRegistry.authToken) && GUILayout.Button("🗑", GUILayout.Width(22), GUILayout.Height(18)))
                                 {
                                     var deleteVersion = !string.IsNullOrEmpty(_selectedVersion) ? _selectedVersion : _selectedModule.LatestVersion;
-                                    if (EditorUtility.DisplayDialog("确认删除",
-                                        $"确定要从远程仓库删除 {_selectedModule.ModuleId}@{deleteVersion} 吗？\n此操作不可恢复！",
-                                        "删除", "取消"))
-                                    {
-                                        DeleteRemoteVersionAsync(_selectedModule, deleteVersion).Forget();
-                                    }
+                                    DeleteRemoteVersionAsync(_selectedModule, deleteVersion, delRegistry).Forget();
                                 }
                             }
                         }
@@ -837,6 +771,20 @@ namespace Puffin.Editor.Hub.UI
                                 {
                                     menu.AddDisabledItem(new GUIContent("无缓存"));
                                 }
+
+                                // 删除远程版本（需要 token）
+                                var registryId = _selectedModule.SourceRegistryId ?? _selectedModule.RegistryId;
+                                var registry = HubSettings.Instance.registries.Find(r => r.id == registryId);
+                                if (registry != null && !string.IsNullOrEmpty(registry.authToken))
+                                {
+                                    menu.AddSeparator("");
+                                    var verToDelete = currentVer;
+                                    menu.AddItem(new GUIContent($"删除远程版本 ({verToDelete})"), false, () =>
+                                    {
+                                        DeleteRemoteVersionAsync(_selectedModule, verToDelete, registry).Forget();
+                                    });
+                                }
+
                                 menu.ShowAsContext();
                             }
                             EditorGUI.EndDisabledGroup();
@@ -883,12 +831,42 @@ namespace Puffin.Editor.Hub.UI
                         }
 
                         // 显示依赖
-                        if (_selectedModule.Dependencies != null && _selectedModule.Dependencies.Count > 0)
+                        // 显示依赖模块（优先使用新格式）
+                        var allDeps = _selectedModule.Manifest?.GetAllDependencies();
+                        if (allDeps != null && allDeps.Count > 0)
                         {
                             EditorGUILayout.Space(5);
                             EditorGUILayout.LabelField("依赖模块:", EditorStyles.boldLabel);
-                            foreach (var dep in _selectedModule.Dependencies)
-                                EditorGUILayout.LabelField($"  • {dep}", EditorStyles.miniLabel);
+                            foreach (var dep in allDeps)
+                            {
+                                var modulesDir = System.IO.Path.Combine(Application.dataPath, "Puffin/Modules");
+                                var depPath = System.IO.Path.Combine(modulesDir, dep.moduleId);
+                                var isDepInstalled = System.IO.Directory.Exists(depPath);
+
+                                // 显示格式: hub|模块@版本
+                                var registryName = GetDependencyRegistryName(dep.registryId);
+                                var versionText = string.IsNullOrEmpty(dep.version) ? "最新" : dep.version;
+                                var displayText = $"{registryName}|{dep.moduleId}@{versionText}";
+                                var optText = dep.optional ? " (可选)" : "";
+
+                                EditorGUILayout.BeginHorizontal();
+                                if (isDepInstalled)
+                                {
+                                    EditorGUILayout.LabelField($"  • {displayText}{optText} ✓", EditorStyles.miniLabel);
+                                }
+                                else
+                                {
+                                    var style = new GUIStyle(EditorStyles.miniLabel) { normal = { textColor = Color.yellow } };
+                                    EditorGUILayout.LabelField($"  • {displayText}{optText}", style);
+                                    EditorGUI.BeginDisabledGroup(_isInstalling);
+                                    if (GUILayout.Button("安装", EditorStyles.miniButton, GUILayout.Width(40)))
+                                    {
+                                        InstallDependency(dep.moduleId, dep.registryId);
+                                    }
+                                    EditorGUI.EndDisabledGroup();
+                                }
+                                EditorGUILayout.EndHorizontal();
+                            }
                         }
 
                         // 显示环境依赖
@@ -897,13 +875,15 @@ namespace Puffin.Editor.Hub.UI
                         {
                             EditorGUILayout.Space(5);
                             EditorGUILayout.LabelField("环境依赖:", EditorStyles.boldLabel);
-                            var sourceNames = new[] { "NuGet", "GitHub", "URL", "Release" };
+                            var sourceNames = new[] { "NuGet", "GitHub", "URL", "Release", "UPM" };
                             foreach (var env in envDeps)
                             {
+                                var isEnvInstalled = IsEnvDependencyInstalled(env);
+                                var status = isEnvInstalled ? "✓" : (env.optional ? "○" : "⚠");
                                 var opt = env.optional ? " (可选)" : "";
                                 var ver = !string.IsNullOrEmpty(env.version) ? $" v{env.version}" : "";
-                                EditorGUILayout.LabelField($"  • {env.id}{ver} [{sourceNames[env.source]}]{opt}",
-                                    EditorStyles.miniLabel);
+                                var style = (isEnvInstalled || env.optional) ? EditorStyles.miniLabel : new GUIStyle(EditorStyles.miniLabel) { normal = { textColor = Color.yellow } };
+                                EditorGUILayout.LabelField($"  {status} {env.id}{ver} [{sourceNames[env.source]}]{opt}", style);
                             }
                         }
 
@@ -994,22 +974,6 @@ namespace Puffin.Editor.Hub.UI
         private static string GetModuleDisplayText(HubModuleInfo module)
         {
             return !string.IsNullOrEmpty(module.DisplayName) ? module.DisplayName : module.ModuleId;
-        }
-
-        /// <summary>
-        /// 获取已安装模块的实际路径（启用或禁用目录）
-        /// </summary>
-        private static string GetInstalledModulePath(string moduleId)
-        {
-            var enabledPath = System.IO.Path.Combine(Application.dataPath, $"Puffin/Modules/{moduleId}");
-            if (System.IO.Directory.Exists(enabledPath))
-                return enabledPath;
-
-            var disabledPath = System.IO.Path.Combine(HubSettings.DisabledModulesDir, moduleId);
-            if (System.IO.Directory.Exists(disabledPath))
-                return disabledPath;
-
-            return null;
         }
 
         private void ApplyFilter()
@@ -1283,6 +1247,67 @@ namespace Puffin.Editor.Hub.UI
         }
 
         /// <summary>
+        /// 获取依赖的仓库源名称
+        /// </summary>
+        private string GetDependencyRegistryName(string registryId)
+        {
+            if (string.IsNullOrEmpty(registryId)) return "自动";
+            var registry = HubSettings.Instance.registries.Find(r => r.id == registryId);
+            return registry?.name ?? registryId;
+        }
+
+        /// <summary>
+        /// 检查环境依赖是否已安装
+        /// </summary>
+        private bool IsEnvDependencyInstalled(EnvironmentDependency env)
+        {
+            var depDef = new Puffin.Editor.Environment.DependencyDefinition
+            {
+                id = env.id,
+                source = (Puffin.Editor.Environment.DependencySource)env.source,
+                type = (Puffin.Editor.Environment.DependencyType)env.type,
+                url = env.url,
+                version = env.version,
+                installDir = env.installDir,
+                extractPath = env.extractPath,
+                requiredFiles = env.requiredFiles
+            };
+            var depManager = new Puffin.Editor.Environment.DependencyManager();
+            return depManager.IsInstalled(depDef);
+        }
+
+        /// <summary>
+        /// 安装依赖模块
+        /// </summary>
+        private void InstallDependency(string moduleId, string registryId = null)
+        {
+            // 优先在指定仓库中查找
+            HubModuleInfo targetModule = null;
+            if (!string.IsNullOrEmpty(registryId) && _registryModules.TryGetValue(registryId, out var modules))
+            {
+                targetModule = modules.Find(m => m.ModuleId == moduleId);
+            }
+
+            // 如果指定仓库没找到，在所有仓库中查找
+            if (targetModule == null)
+            {
+                foreach (var kvp in _registryModules)
+                {
+                    targetModule = kvp.Value.Find(m => m.ModuleId == moduleId);
+                    if (targetModule != null) break;
+                }
+            }
+
+            if (targetModule == null)
+            {
+                EditorDialog.DisplayAlertDialog("安装失败", $"未找到模块: {moduleId}", "确定", DialogIconType.Error);
+                return;
+            }
+
+            InstallModuleAsync(targetModule, targetModule.LatestVersion).Forget();
+        }
+
+        /// <summary>
         /// 下载并安装模块（旧方法，保留兼容）
         /// </summary>
         private async UniTaskVoid InstallModuleAsync(HubModuleInfo module, string version = null)
@@ -1362,14 +1387,14 @@ namespace Puffin.Editor.Hub.UI
             string message;
             if (dependents.Count > 0)
             {
-                message = $"以下模块依赖 {GetModuleDisplayText(module)}，卸载后它们将被禁用：\n\n• {string.Join("\n• ", dependents)}\n\n确定要卸载吗？";
+                message = $"以下模块依赖 {GetModuleDisplayText(module)}，卸载后它们将丢失依赖：\n\n• {string.Join("\n• ", dependents)}\n\n确定要卸载吗？";
             }
             else
             {
                 message = $"确定要卸载 {GetModuleDisplayText(module)} 吗？";
             }
 
-            if (!EditorUtility.DisplayDialog("确认卸载", message, "卸载", "取消"))
+            if (!EditorDialog.DisplayDecisionDialog("确认卸载", message, "卸载", "取消", DialogIconType.Warning))
                 return;
 
             _isLoading = true;
@@ -1393,28 +1418,31 @@ namespace Puffin.Editor.Hub.UI
             }
         }
 
-        private async UniTaskVoid DeleteRemoteVersionAsync(HubModuleInfo module, string version)
+        private async UniTaskVoid DeleteRemoteVersionAsync(HubModuleInfo module, string version, RegistrySource registry)
         {
+            if (!EditorDialog.DisplayDecisionDialog("确认删除", $"确定要从远程仓库删除 {module.ModuleId}@{version} 吗？\n\n此操作不可撤销！", "删除", "取消", DialogIconType.Warning))
+                return;
+
             _isLoading = true;
             _statusMessage = "正在删除...";
             Repaint();
 
             try
             {
-                var registry = HubSettings.Instance.registries.Find(r => r.id == module.RegistryId);
-                if (registry != null)
+                var publisher = new ModulePublisher();
+                var success = await publisher.DeleteVersionAsync(registry, module.ModuleId, version, s =>
                 {
-                    var publisher = new ModulePublisher();
-                    var success = await publisher.DeleteVersionAsync(registry, module.ModuleId, version, s =>
-                    {
-                        _statusMessage = s;
-                        Repaint();
-                    });
-                    if (success)
-                    {
-                        _selectedModule = null;
-                        RefreshModulesAsync(true).Forget();
-                    }
+                    _statusMessage = s;
+                    Repaint();
+                });
+                if (success)
+                {
+                    _statusMessage = "删除成功";
+                    RefreshModulesAsync(true).Forget();
+                }
+                else
+                {
+                    _statusMessage = "删除失败";
                 }
             }
             finally
@@ -1515,10 +1543,10 @@ namespace Puffin.Editor.Hub.UI
         {
             if (module == null || !module.IsInstalled) return;
 
-            var modulePath = GetInstalledModulePath(module.ModuleId);
-            if (modulePath == null)
+            var modulePath = System.IO.Path.Combine(Application.dataPath, $"Puffin/Modules/{module.ModuleId}");
+            if (!System.IO.Directory.Exists(modulePath))
             {
-                EditorUtility.DisplayDialog("导出失败", $"模块目录不存在: {module.ModuleId}", "确定");
+                EditorDialog.DisplayAlertDialog("导出失败", $"模块目录不存在: {module.ModuleId}", "确定", DialogIconType.Error);
                 return;
             }
 
@@ -1543,12 +1571,12 @@ namespace Puffin.Editor.Hub.UI
                 // 清理临时目录
                 System.IO.Directory.Delete(tempDir, true);
 
-                EditorUtility.DisplayDialog("导出成功", $"模块已导出到:\n{savePath}", "确定");
+                EditorDialog.DisplayAlertDialog("导出成功", $"模块已导出到:\n{savePath}", "确定", DialogIconType.Info);
             }
             catch (Exception e)
             {
                 Debug.LogError($"[Hub] 导出失败: {e}");
-                EditorUtility.DisplayDialog("导出失败", e.Message, "确定");
+                EditorDialog.DisplayAlertDialog("导出失败", e.Message, "确定", DialogIconType.Error);
             }
         }
 
@@ -1568,7 +1596,7 @@ namespace Puffin.Editor.Hub.UI
                 if (dirs.Length == 0)
                 {
                     System.IO.Directory.Delete(tempDir, true);
-                    EditorUtility.DisplayDialog("导入失败", "包中没有找到模块目录", "确定");
+                    EditorDialog.DisplayAlertDialog("导入失败", "包中没有找到模块目录", "确定", DialogIconType.Error);
                     return;
                 }
 
@@ -1606,8 +1634,8 @@ namespace Puffin.Editor.Hub.UI
                 if (!System.IO.Directory.Exists(parentDir))
                     System.IO.Directory.CreateDirectory(parentDir);
 
-                // 移动模块
-                System.IO.Directory.Move(moduleDir, targetPath);
+                // 复制模块（支持跨卷）
+                CopyDirectory(moduleDir, targetPath);
 
                 // 清理临时目录
                 System.IO.Directory.Delete(tempDir, true);
@@ -1615,12 +1643,12 @@ namespace Puffin.Editor.Hub.UI
                 AssetDatabase.Refresh();
                 RefreshModulesAsync().Forget();
 
-                EditorUtility.DisplayDialog("导入成功", $"模块 {moduleId} 已导入", "确定");
+                EditorDialog.DisplayAlertDialog("导入成功", $"模块 {moduleId} 已导入", "确定", DialogIconType.Info);
             }
             catch (Exception e)
             {
                 Debug.LogError($"[Hub] 导入失败: {e}");
-                EditorUtility.DisplayDialog("导入失败", e.Message, "确定");
+                EditorDialog.DisplayAlertDialog("导入失败", e.Message, "确定", DialogIconType.Error);
             }
         }
 

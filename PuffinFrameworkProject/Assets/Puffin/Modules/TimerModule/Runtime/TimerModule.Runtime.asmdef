@@ -1,0 +1,15 @@
+{
+    "name": "TimerModule.Runtime",
+    "rootNamespace": "",
+    "references": [
+        "PuffinFramework.Runtime"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "noEngineReferences": false
+}

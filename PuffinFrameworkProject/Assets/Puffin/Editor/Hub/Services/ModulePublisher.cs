@@ -5,9 +5,11 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Text;
 using Cysharp.Threading.Tasks;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Puffin.Editor.Hub.Data;
-using Puffin.Runtime.Tools;
 using UnityEngine;
 using CompressionLevel = System.IO.Compression.CompressionLevel;
 
@@ -315,8 +317,8 @@ namespace Puffin.Editor.Hub.Services
 
                 if (getRequest.result == UnityEngine.Networking.UnityWebRequest.Result.Success)
                 {
-                    var json = JsonValue.Parse(getRequest.downloadHandler.text);
-                    sha = json["sha"].AsString();
+                    var json = JObject.Parse(getRequest.downloadHandler.text);
+                    sha = json["sha"]?.Value<string>();
                 }
                 getRequest.Dispose();
             }
@@ -408,13 +410,13 @@ namespace Puffin.Editor.Hub.Services
 
                 if (getRequest.result == UnityEngine.Networking.UnityWebRequest.Result.Success)
                 {
-                    var json = JsonValue.Parse(getRequest.downloadHandler.text);
-                    sha = json["sha"].AsString();
-                    var content = json["content"].AsRawString();
+                    var json = JObject.Parse(getRequest.downloadHandler.text);
+                    sha = json["sha"]?.Value<string>();
+                    var content = json["content"]?.Value<string>();
                     if (!string.IsNullOrEmpty(content))
                     {
-                        var base64 = content.Replace("\\n", "");
-                        existingContent = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(base64));
+                        var base64 = content.Replace("\n", "");
+                        existingContent = Encoding.UTF8.GetString(Convert.FromBase64String(base64));
                     }
                 }
                 getRequest.Dispose();
@@ -428,23 +430,24 @@ namespace Puffin.Editor.Hub.Services
             {
                 try
                 {
-                    var json = JsonValue.Parse(existingContent);
-                    registry.name = json["name"].AsString() ?? registry.name;
-                    registry.version = json["version"].AsString() ?? registry.version;
+                    var json = JObject.Parse(existingContent);
+                    registry.name = json["name"]?.Value<string>() ?? registry.name;
+                    registry.version = json["version"]?.Value<string>() ?? registry.version;
 
-                    var modules = json["modules"];
-                    if (modules.Type == JsonType.Object)
+                    var modules = json["modules"] as JObject;
+                    if (modules != null)
                     {
-                        var enumerator = modules.GetObjectEnumerator();
-                        while (enumerator.MoveNext())
+                        foreach (var kvp in modules)
                         {
-                            var (entryId, moduleData) = enumerator.Current;
+                            var entryId = kvp.Key;
+                            var moduleData = kvp.Value as JObject;
+                            if (moduleData == null) continue;
                             registry.modules.Add(new RegistryModuleEntry
                             {
                                 id = entryId,
-                                latest = moduleData["latest"].AsString(),
-                                versions = moduleData["versions"].ToStringList() ?? new List<string>(),
-                                updatedAt = moduleData["updatedAt"].AsString(),
+                                latest = moduleData["latest"]?.Value<string>(),
+                                versions = moduleData["versions"]?.ToObject<List<string>>() ?? new List<string>(),
+                                updatedAt = moduleData["updatedAt"]?.Value<string>(),
                             });
                         }
                     }
@@ -527,18 +530,13 @@ namespace Puffin.Editor.Hub.Services
                 if (!string.IsNullOrEmpty(filesJson))
                 {
                     // 解析文件列表并删除（GitHub API 返回数组）
-                    var filesArray = JsonValue.Parse(filesJson);
-                    if (filesArray.Type == JsonType.Array)
+                    var filesArray = JArray.Parse(filesJson);
+                    foreach (var file in filesArray)
                     {
-                        var enumerator = filesArray.GetArrayEnumerator();
-                        while (enumerator.MoveNext())
-                        {
-                            var file = enumerator.Current;
-                            var filePath = file["path"].AsString();
-                            var sha = file["sha"].AsString();
-                            if (!string.IsNullOrEmpty(filePath) && !string.IsNullOrEmpty(sha))
-                                await DeleteFileAsync(owner, repo, registry.branch, filePath, sha, registry.authToken);
-                        }
+                        var filePath = file["path"]?.Value<string>();
+                        var sha = file["sha"]?.Value<string>();
+                        if (!string.IsNullOrEmpty(filePath) && !string.IsNullOrEmpty(sha))
+                            await DeleteFileAsync(owner, repo, registry.branch, filePath, sha, registry.authToken);
                     }
                 }
 
@@ -592,13 +590,13 @@ namespace Puffin.Editor.Hub.Services
             var response = await FetchGitHubApiAsync(url, token);
             if (string.IsNullOrEmpty(response)) return false;
 
-            var json = JsonValue.Parse(response);
-            var sha = json["sha"].AsString();
-            var content = json["content"].AsRawString();
+            var json = JObject.Parse(response);
+            var sha = json["sha"]?.Value<string>();
+            var content = json["content"]?.Value<string>();
             if (string.IsNullOrEmpty(sha) || string.IsNullOrEmpty(content)) return false;
 
-            var base64 = content.Replace("\\n", "");
-            var existingContent = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(base64));
+            var base64 = content.Replace("\n", "");
+            var existingContent = Encoding.UTF8.GetString(Convert.FromBase64String(base64));
 
             // 解析并修改
             var registry = ParseRegistryJson(existingContent);
@@ -626,23 +624,24 @@ namespace Puffin.Editor.Hub.Services
         private RegistryJson ParseRegistryJson(string content)
         {
             var registry = new RegistryJson { name = "Puffin Modules", version = "1.0.0", modules = new List<RegistryModuleEntry>() };
-            var json = JsonValue.Parse(content);
-            registry.name = json["name"].AsString() ?? registry.name;
-            registry.version = json["version"].AsString() ?? registry.version;
+            var json = JObject.Parse(content);
+            registry.name = json["name"]?.Value<string>() ?? registry.name;
+            registry.version = json["version"]?.Value<string>() ?? registry.version;
 
-            var modules = json["modules"];
-            if (modules.Type == JsonType.Object)
+            var modules = json["modules"] as JObject;
+            if (modules != null)
             {
-                var enumerator = modules.GetObjectEnumerator();
-                while (enumerator.MoveNext())
+                foreach (var kvp in modules)
                 {
-                    var (entryId, moduleData) = enumerator.Current;
+                    var entryId = kvp.Key;
+                    var moduleData = kvp.Value as JObject;
+                    if (moduleData == null) continue;
                     registry.modules.Add(new RegistryModuleEntry
                     {
                         id = entryId,
-                        latest = moduleData["latest"].AsString(),
-                        versions = moduleData["versions"].ToStringList() ?? new List<string>(),
-                        updatedAt = moduleData["updatedAt"].AsString()
+                        latest = moduleData["latest"]?.Value<string>(),
+                        versions = moduleData["versions"]?.ToObject<List<string>>() ?? new List<string>(),
+                        updatedAt = moduleData["updatedAt"]?.Value<string>()
                     });
                 }
             }
@@ -651,22 +650,27 @@ namespace Puffin.Editor.Hub.Services
 
         private string BuildRegistryJson(RegistryJson registry)
         {
-            var builder = new JsonBuilder();
-            builder.BeginObject();
-            builder.Property("name", registry.name);
-            builder.Property("version", registry.version);
-            builder.Key("modules").BeginObject();
+            var root = new JObject
+            {
+                ["name"] = registry.name,
+                ["version"] = registry.version,
+                ["modules"] = new JObject()
+            };
+
+            var modules = (JObject)root["modules"];
             foreach (var m in registry.modules)
             {
-                builder.Key(m.id).BeginObject();
-                builder.Property("latest", m.latest);
-                builder.StringArray("versions", m.versions);
-                builder.PropertyIf("updatedAt", m.updatedAt);
-                builder.EndObject();
+                var moduleObj = new JObject
+                {
+                    ["latest"] = m.latest,
+                    ["versions"] = new JArray(m.versions)
+                };
+                if (!string.IsNullOrEmpty(m.updatedAt))
+                    moduleObj["updatedAt"] = m.updatedAt;
+                modules[m.id] = moduleObj;
             }
-            builder.EndObject();
-            builder.EndObject();
-            return builder.ToString();
+
+            return root.ToString(Formatting.Indented);
         }
 
         [Serializable]

@@ -1,0 +1,16 @@
+{
+    "name": "Test.Runtime",
+    "rootNamespace": "",
+    "references": [
+        "PuffinFramework.Runtime",
+        "TimerModule.Runtime"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "noEngineReferences": false
+}

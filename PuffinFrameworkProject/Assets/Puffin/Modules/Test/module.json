@@ -1,0 +1,27 @@
+{
+    "moduleId": "Test",
+    "displayName": "测试",
+    "version": "1.0.0",
+    "author": "",
+    "description": "",
+    "tags": [],
+    "unityVersion": "",
+    "puffinVersion": "",
+    "dependencies": [
+        "TimerModule@1.0.0"
+    ],
+    "moduleDependencies": [
+        {
+            "moduleId": "TimerModule",
+            "version": "1.0.0",
+            "registryId": "official",
+            "optional": false
+        }
+    ],
+    "envDependencies": [],
+    "downloadUrl": "",
+    "checksum": "",
+    "size": 0,
+    "releaseNotes": "",
+    "publishedAt": ""
+}

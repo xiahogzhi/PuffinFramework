@@ -72,11 +72,6 @@ namespace Puffin.Editor.Hub.Data
         /// </summary>
         public static string LockFilePath => Path.Combine(Application.dataPath, "../Library/PuffinHub/installed.json");
 
-        /// <summary>
-        /// 禁用模块存放目录
-        /// </summary>
-        public static string DisabledModulesDir => Path.Combine(Application.dataPath, "../Library/PuffinHub/DisabledModules");
-
         public void Save()
         {
             EditorUtility.SetDirty(this);

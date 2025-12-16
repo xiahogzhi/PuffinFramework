@@ -18,8 +18,6 @@ namespace Puffin.Editor.Hub.Data
         public string checksum;
         public string installedAt;
         public List<string> resolvedDependencies;  // moduleId@version
-        public bool isDisabled;  // 是否被禁用
-        public bool isManuallyDisabled;  // 是否是用户手动禁用（不会自动启用）
     }
 
     /// <summary>
@@ -101,49 +99,6 @@ namespace Puffin.Editor.Hub.Data
         public static void Reload()
         {
             _instance = Load();
-        }
-
-        public bool IsDisabled(string moduleId)
-        {
-            var module = GetModule(moduleId);
-            return module != null && module.isDisabled;
-        }
-
-        public void SetDisabled(string moduleId, bool disabled, bool isManual = false)
-        {
-            var module = GetModule(moduleId);
-            if (module == null)
-            {
-                // 本地模块没有锁定记录，创建一个
-                module = new InstalledModuleLock
-                {
-                    moduleId = moduleId,
-                    registryId = "local",
-                    installedAt = DateTime.Now.ToString("o")
-                };
-                modules.Add(module);
-            }
-
-            if (module.isDisabled != disabled || module.isManuallyDisabled != isManual)
-            {
-                module.isDisabled = disabled;
-                if (disabled)
-                    module.isManuallyDisabled = isManual;
-                else
-                    module.isManuallyDisabled = false;
-                Save();
-            }
-        }
-
-        public bool IsManuallyDisabled(string moduleId)
-        {
-            var module = GetModule(moduleId);
-            return module != null && module.isManuallyDisabled;
-        }
-
-        public List<InstalledModuleLock> GetDisabledModules()
-        {
-            return modules.FindAll(m => m.isDisabled);
         }
     }
 }

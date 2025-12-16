@@ -4,8 +4,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Cysharp.Threading.Tasks;
+using Newtonsoft.Json.Linq;
 using Puffin.Editor.Hub.Data;
-using Puffin.Runtime.Tools;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -21,33 +21,20 @@ namespace Puffin.Editor.Hub.Services
         private readonly Dictionary<string, HubModuleManifest> _manifestCache = new();
 
         /// <summary>
-        /// 获取已安装的模块列表（包括禁用的模块）
+        /// 获取已安装的模块列表
         /// </summary>
         public List<HubModuleInfo> GetInstalledModules()
         {
             var result = new List<HubModuleInfo>();
-            var addedIds = new HashSet<string>();
 
-            // 扫描启用的模块目录（优先）
+            // 扫描模块目录
             var modulesPath = Path.Combine(UnityEngine.Application.dataPath, "Puffin/Modules");
             if (Directory.Exists(modulesPath))
             {
                 foreach (var dir in Directory.GetDirectories(modulesPath))
                 {
-                    var info = CreateModuleInfoFromDir(dir, false);
-                    if (info != null && addedIds.Add(info.ModuleId))
-                        result.Add(info);
-                }
-            }
-
-            // 扫描禁用的模块目录（跳过已添加的）
-            var disabledPath = HubSettings.DisabledModulesDir;
-            if (Directory.Exists(disabledPath))
-            {
-                foreach (var dir in Directory.GetDirectories(disabledPath))
-                {
-                    var info = CreateModuleInfoFromDir(dir, true);
-                    if (info != null && addedIds.Add(info.ModuleId))
+                    var info = CreateModuleInfoFromDir(dir);
+                    if (info != null)
                         result.Add(info);
                 }
             }
@@ -55,7 +42,7 @@ namespace Puffin.Editor.Hub.Services
             return result;
         }
 
-        private HubModuleInfo CreateModuleInfoFromDir(string dir, bool isDisabled)
+        private HubModuleInfo CreateModuleInfoFromDir(string dir)
         {
             var folderName = Path.GetFileName(dir);
 
@@ -403,11 +390,11 @@ namespace Puffin.Editor.Hub.Services
 
             // GitHub API 返回 JSON，content 字段是 base64 编码
             var response = request.downloadHandler.text;
-            var json = JsonValue.Parse(response);
-            var content = json["content"].AsRawString();
+            var json = JObject.Parse(response);
+            var content = json["content"]?.Value<string>();
             if (string.IsNullOrEmpty(content)) return null;
 
-            var base64Content = content.Replace("\\n", "");
+            var base64Content = content.Replace("\n", "");
             var bytes = Convert.FromBase64String(base64Content);
             return System.Text.Encoding.UTF8.GetString(bytes);
         }
@@ -415,19 +402,21 @@ namespace Puffin.Editor.Hub.Services
         private Dictionary<string, ModuleVersionInfo> ParseModulesDict(string jsonStr)
         {
             var result = new Dictionary<string, ModuleVersionInfo>();
-            var root = JsonValue.Parse(jsonStr);
-            var modules = root["modules"];
-            if (modules.Type != JsonType.Object) return result;
+            var root = JObject.Parse(jsonStr);
+            var modules = root["modules"] as JObject;
+            if (modules == null) return result;
 
-            var enumerator = modules.GetObjectEnumerator();
-            while (enumerator.MoveNext())
+            foreach (var kvp in modules)
             {
-                var (moduleId, moduleData) = enumerator.Current;
+                var moduleId = kvp.Key;
+                var moduleData = kvp.Value as JObject;
+                if (moduleData == null) continue;
+
                 result[moduleId] = new ModuleVersionInfo
                 {
-                    latest = moduleData["latest"].AsString(),
-                    versions = moduleData["versions"].ToStringList() ?? new List<string>(),
-                    updatedAt = moduleData["updatedAt"].AsString()
+                    latest = moduleData["latest"]?.Value<string>(),
+                    versions = moduleData["versions"]?.ToObject<List<string>>() ?? new List<string>(),
+                    updatedAt = moduleData["updatedAt"]?.Value<string>()
                 };
             }
 

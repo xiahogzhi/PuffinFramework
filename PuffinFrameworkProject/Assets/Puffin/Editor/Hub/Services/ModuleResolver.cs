@@ -59,16 +59,52 @@ namespace Puffin.Editor.Hub.Services
         {
             var result = new ResolveResult { Success = true };
             var resolved = new Dictionary<string, ResolvedModule>();
-            var pending = new Queue<(string moduleId, string version, string registryId)>();
+            var pending = new Queue<(string moduleId, string version, string registryId, string requestedBy)>();
 
-            pending.Enqueue((moduleId, version, registryId));
+            pending.Enqueue((moduleId, version, registryId, null));
 
             while (pending.Count > 0)
             {
-                var (mid, ver, rid) = pending.Dequeue();
+                var (mid, ver, rid, requestedBy) = pending.Dequeue();
 
-                if (resolved.ContainsKey(mid))
-                    continue;
+                // 版本冲突处理
+                if (resolved.TryGetValue(mid, out var existing))
+                {
+                    // 不同源的同名模块视为冲突（不是版本升级）
+                    if (existing.RegistryId != rid)
+                    {
+                        result.Conflicts.Add($"模块源冲突: {mid} 来自不同仓库 [{existing.RegistryId}] vs [{rid}]");
+                        result.Success = false;
+                        continue;
+                    }
+
+                    // 同源模块：最高版本优先
+                    if (!string.IsNullOrEmpty(ver) && !string.IsNullOrEmpty(existing.Version))
+                    {
+                        var cmp = CompareVersions(ParseVersion(ver), ParseVersion(existing.Version));
+                        if (cmp > 0)
+                        {
+                            // 新版本更高，替换并重新解析依赖
+                            result.Warnings.Add($"版本冲突: {mid} ({existing.Version} → {ver})，使用较高版本");
+                            resolved.Remove(mid);
+                        }
+                        else if (cmp < 0)
+                        {
+                            // 已有版本更高，跳过
+                            if (!string.IsNullOrEmpty(requestedBy))
+                                result.Warnings.Add($"版本冲突: {requestedBy} 需要 {mid}@{ver}，但使用 {existing.Version}");
+                            continue;
+                        }
+                        else
+                        {
+                            continue; // 版本相同
+                        }
+                    }
+                    else
+                    {
+                        continue;
+                    }
+                }
 
                 var registry = HubSettings.Instance.registries.Find(r => r.id == rid);
                 if (registry == null)
@@ -149,7 +185,7 @@ namespace Puffin.Editor.Hub.Services
                         continue;
                     }
 
-                    pending.Enqueue((dep.moduleId, depVersion, depRegistryId));
+                    pending.Enqueue((dep.moduleId, depVersion, depRegistryId, mid));
                 }
             }
 

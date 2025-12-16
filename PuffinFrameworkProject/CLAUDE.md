@@ -34,7 +34,8 @@ Assets/Puffin/
 │   │   │   ├── GitHubReleaseInstaller.cs
 │   │   │   ├── GitHubRepoInstaller.cs
 │   │   │   ├── IPackageInstaller.cs
-│   │   │   └── NuGetInstaller.cs
+│   │   │   ├── NuGetInstaller.cs
+│   │   │   └── UnityPackageInstaller.cs  # Unity Package Manager 安装器
 │   │   ├── DependencyDefinition.cs
 │   │   └── DependencyManager.cs
 │   ├── Hub/                       # 模块管理中心（重要）
@@ -143,7 +144,6 @@ Assets/Puffin/
         │   └── ObjectPool.cs
         ├── DefaultLogger.cs
         ├── Log.cs
-        ├── SimpleJson.cs
         └── Singleton.cs
 ```
 

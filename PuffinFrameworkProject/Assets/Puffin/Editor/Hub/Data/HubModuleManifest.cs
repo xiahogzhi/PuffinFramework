@@ -74,7 +74,9 @@ namespace Puffin.Editor.Hub.Data
             {
                 foreach (var dep in dependencies)
                 {
-                    if (!result.Exists(d => d.moduleId == dep))
+                    // 解析 moduleId（支持 "moduleId@version" 格式）
+                    var depId = dep.Contains("@") ? dep.Split('@')[0] : dep;
+                    if (!result.Exists(d => d.moduleId == depId))
                         result.Add(new ModuleDependency(dep));
                 }
             }

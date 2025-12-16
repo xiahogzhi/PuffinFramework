@@ -5,10 +5,10 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using Cysharp.Threading.Tasks;
+using Newtonsoft.Json.Linq;
 using Puffin.Editor.Environment;
 using Puffin.Editor.Environment.Core;
 using Puffin.Editor.Hub.Data;
-using Puffin.Runtime.Tools;
 using UnityEditor;
 using UnityEngine;
 
@@ -278,11 +278,10 @@ namespace Puffin.Editor.Hub.Services
             try
             {
                 var modulePath = Path.Combine(Application.dataPath, $"Puffin/Modules/{moduleId}");
-                var disabledPath = Path.Combine(HubSettings.DisabledModulesDir, moduleId);
                 var moduleLock = InstalledModulesLock.Instance.GetModule(moduleId);
 
-                // 检查模块是否存在（启用目录、禁用目录或锁定文件）
-                if (moduleLock == null && !Directory.Exists(modulePath) && !Directory.Exists(disabledPath))
+                // 检查模块是否存在
+                if (moduleLock == null && !Directory.Exists(modulePath))
                 {
                     Debug.LogWarning($"[Hub] 模块未安装: {moduleId}");
                     return false;
@@ -290,12 +289,10 @@ namespace Puffin.Editor.Hub.Services
 
                 OnStatusChanged?.Invoke($"正在卸载: {moduleId}");
 
-                // 获取模块的环境依赖（卸载前，优先从启用目录获取）
-                var envDeps = Directory.Exists(modulePath)
-                    ? GetModuleEnvDependencies(modulePath)
-                    : GetModuleEnvDependencies(disabledPath);
+                // 获取模块的环境依赖
+                var envDeps = GetModuleEnvDependencies(modulePath);
 
-                // 删除启用目录中的模块
+                // 删除模块目录
                 if (Directory.Exists(modulePath))
                 {
                     Directory.Delete(modulePath, true);
@@ -304,21 +301,12 @@ namespace Puffin.Editor.Hub.Services
                         File.Delete(metaPath);
                 }
 
-                // 删除禁用目录中的模块
-                if (Directory.Exists(disabledPath))
-                {
-                    Directory.Delete(disabledPath, true);
-                }
-
                 // 更新锁定文件
                 if (moduleLock != null)
                     InstalledModulesLock.Instance.Remove(moduleId);
 
                 // 清理无依赖的环境依赖
                 CleanupOrphanedEnvDependencies(envDeps, moduleId);
-
-                // 禁用依赖此模块的其他模块
-                ModuleDependencyResolver.OnModuleUninstalled(moduleId);
 
                 OnStatusChanged?.Invoke("卸载完成");
                 AssetDatabase.Refresh();
@@ -330,155 +318,6 @@ namespace Puffin.Editor.Hub.Services
                 Debug.LogError($"[Hub] 卸载异常: {e}");
                 return false;
             }
-        }
-
-        /// <summary>
-        /// 禁用模块 - 将模块文件移动到禁用目录
-        /// </summary>
-        /// <param name="moduleId">模块ID</param>
-        /// <param name="isManual">是否是用户手动禁用（手动禁用的模块不会自动启用）</param>
-        public bool DisableModule(string moduleId, bool isManual = false)
-        {
-            try
-            {
-                var modulePath = Path.Combine(Application.dataPath, $"Puffin/Modules/{moduleId}");
-                if (!Directory.Exists(modulePath))
-                {
-                    Debug.LogWarning($"[Hub] 模块不存在: {moduleId}");
-                    return false;
-                }
-
-                var disabledDir = HubSettings.DisabledModulesDir;
-                if (!Directory.Exists(disabledDir))
-                    Directory.CreateDirectory(disabledDir);
-
-                var targetPath = Path.Combine(disabledDir, moduleId);
-                if (Directory.Exists(targetPath))
-                    Directory.Delete(targetPath, true);
-
-                Directory.Move(modulePath, targetPath);
-
-                // 删除 meta 文件
-                var metaPath = modulePath + ".meta";
-                if (File.Exists(metaPath))
-                    File.Delete(metaPath);
-
-                InstalledModulesLock.Instance.SetDisabled(moduleId, true, isManual);
-                AssetDatabase.Refresh();
-                Debug.Log($"[Hub] 模块已禁用: {moduleId}" + (isManual ? " (手动)" : ""));
-                return true;
-            }
-            catch (Exception e)
-            {
-                Debug.LogError($"[Hub] 禁用模块失败: {e}");
-                return false;
-            }
-        }
-
-        /// <summary>
-        /// 启用模块 - 将模块文件从禁用目录移回
-        /// </summary>
-        public bool EnableModule(string moduleId)
-        {
-            try
-            {
-                var disabledPath = Path.Combine(HubSettings.DisabledModulesDir, moduleId);
-                if (!Directory.Exists(disabledPath))
-                {
-                    Debug.LogWarning($"[Hub] 禁用目录中不存在模块: {moduleId}");
-                    return false;
-                }
-
-                var modulesDir = Path.Combine(Application.dataPath, "Puffin/Modules");
-                if (!Directory.Exists(modulesDir))
-                    Directory.CreateDirectory(modulesDir);
-
-                var targetPath = Path.Combine(modulesDir, moduleId);
-                if (Directory.Exists(targetPath))
-                    Directory.Delete(targetPath, true);
-
-                Directory.Move(disabledPath, targetPath);
-                InstalledModulesLock.Instance.SetDisabled(moduleId, false);
-
-                // 更新程序集依赖引用
-                AsmdefDependencyResolver.ResolveAllModuleDependencies();
-
-                AssetDatabase.Refresh();
-                Debug.Log($"[Hub] 模块已启用: {moduleId}");
-                return true;
-            }
-            catch (Exception e)
-            {
-                Debug.LogError($"[Hub] 启用模块失败: {e}");
-                return false;
-            }
-        }
-
-        /// <summary>
-        /// 检查模块是否可以启用（所有依赖都已安装且启用）
-        /// </summary>
-        public bool CanEnableModule(string moduleId)
-        {
-            var modulesDir = Path.Combine(Application.dataPath, "Puffin/Modules");
-            var disabledPath = Path.Combine(HubSettings.DisabledModulesDir, moduleId);
-            var manifestPath = Path.Combine(disabledPath, "module.json");
-            if (!File.Exists(manifestPath)) return true;
-
-            try
-            {
-                var json = File.ReadAllText(manifestPath);
-                var manifest = JsonUtility.FromJson<HubModuleManifest>(json);
-                var deps = manifest?.GetAllDependencies();
-                if (deps == null) return true;
-
-                foreach (var dep in deps)
-                {
-                    if (dep.optional) continue;
-                    // 检查依赖模块目录是否存在（启用状态）
-                    var depPath = Path.Combine(modulesDir, dep.moduleId);
-                    if (!Directory.Exists(depPath))
-                        return false;
-                }
-                return true;
-            }
-            catch { return true; }
-        }
-
-        /// <summary>
-        /// 获取模块缺失的依赖
-        /// </summary>
-        public List<string> GetMissingDependencies(string moduleId)
-        {
-            var missing = new List<string>();
-            var modulesDir = Path.Combine(Application.dataPath, "Puffin/Modules");
-            var modulePath = Path.Combine(modulesDir, moduleId);
-            var disabledPath = Path.Combine(HubSettings.DisabledModulesDir, moduleId);
-            var manifestPath = File.Exists(Path.Combine(modulePath, "module.json"))
-                ? Path.Combine(modulePath, "module.json")
-                : Path.Combine(disabledPath, "module.json");
-
-            if (!File.Exists(manifestPath)) return missing;
-
-            try
-            {
-                var json = File.ReadAllText(manifestPath);
-                var manifest = JsonUtility.FromJson<HubModuleManifest>(json);
-                var deps = manifest?.GetAllDependencies();
-                if (deps == null) return missing;
-
-                foreach (var dep in deps)
-                {
-                    if (dep.optional) continue;
-                    // 检查依赖模块目录是否存在（启用状态）
-                    var depPath = Path.Combine(modulesDir, dep.moduleId);
-                    if (!Directory.Exists(depPath))
-                    {
-                        missing.Add(dep.moduleId);
-                    }
-                }
-            }
-            catch { }
-            return missing;
         }
 
         /// <summary>
@@ -891,15 +730,15 @@ namespace Puffin.Editor.Hub.Services
 
             // GitHub API 返回 JSON，content 字段是 base64 编码
             var response = request.downloadHandler.text;
-            var json = JsonValue.Parse(response);
-            var content = json["content"].AsRawString();
+            var json = JObject.Parse(response);
+            var content = json["content"]?.Value<string>();
             if (string.IsNullOrEmpty(content))
             {
                 Debug.LogWarning("[Hub] GitHub API 响应中没有 content 字段");
                 return false;
             }
 
-            var base64Content = content.Replace("\\n", "");
+            var base64Content = content.Replace("\n", "");
             var bytes = Convert.FromBase64String(base64Content);
             File.WriteAllBytes(savePath, bytes);
             return true;

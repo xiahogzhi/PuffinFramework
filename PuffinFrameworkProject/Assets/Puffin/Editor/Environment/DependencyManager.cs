@@ -33,7 +33,8 @@ namespace Puffin.Editor.Environment
                 {DependencySource.NuGet, new NuGetInstaller()},
                 {DependencySource.GitHubRepo, new GitHubRepoInstaller()},
                 {DependencySource.GitHubRelease, new GitHubReleaseInstaller()},
-                {DependencySource.DirectUrl, new DirectUrlInstaller()}
+                {DependencySource.DirectUrl, new DirectUrlInstaller()},
+                {DependencySource.UnityPackage, new UnityPackageInstaller()}
             };
         }
 

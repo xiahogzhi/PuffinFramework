@@ -12,10 +12,4 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f6ceb45f8e7ff7b40925c3f8b701510e, type: 3}
   m_Name: ModuleRegistrySettings
   m_EditorClassIdentifier: PuffinFramework.Runtime::Puffin.Runtime.Settings.ModuleRegistrySettings
-  modules:
-  - moduleId: UISystemModule
-    enabled: 1
-    dependencies: []
-  - moduleId: TimerModule
-    enabled: 1
-    dependencies: []
+  modules: []
