@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Cysharp.Threading.Tasks;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Puffin.Editor.Hub.Data;
 using UnityEngine;
@@ -52,7 +53,8 @@ namespace Puffin.Editor.Hub.Services
 
             var moduleJsonPath = Path.Combine(dir, "module.json");
             var json = File.ReadAllText(moduleJsonPath);
-            var manifest = UnityEngine.JsonUtility.FromJson<HubModuleManifest>(json);
+            // 使用 Newtonsoft.Json 以正确解析 moduleDependencies 等复杂字段
+            var manifest = JsonConvert.DeserializeObject<HubModuleManifest>(json);
 
             var moduleId = manifest?.moduleId ?? folderName;
             var version = manifest?.version;
@@ -127,31 +129,37 @@ namespace Puffin.Editor.Hub.Services
                     var moduleId = kvp.Key;
                     var versionInfo = kvp.Value;
 
-                    // 检查是否已安装且来源匹配
+                    // 检查是否已安装（优先使用本地信息）
                     installedMap.TryGetValue(moduleId, out var installed);
-                    var isInstalled = installed != null && installed.SourceRegistryId == registry.id;
-                    var installedVersion = isInstalled ? installed.InstalledVersion : null;
+                    var isInstalled = installed != null;
+                    var isFromThisRegistry = isInstalled && installed.SourceRegistryId == registry.id;
 
                     var info = new HubModuleInfo
                     {
                         ModuleId = moduleId,
                         DisplayName = installed?.DisplayName,  // 已安装的用本地名字，否则等懒加载
+                        Description = installed?.Description,
+                        Author = installed?.Author,
+                        Tags = installed?.Tags,
+                        ReleaseNotes = installed?.ReleaseNotes,
+                        Dependencies = installed?.Dependencies,
+                        Manifest = installed?.Manifest,  // 使用本地 Manifest
                         LatestVersion = versionInfo.latest,
                         RemoteVersion = versionInfo.latest,
                         RegistryId = registry.id,
-                        InstalledVersion = installedVersion,
+                        InstalledVersion = installed?.InstalledVersion,
                         IsInstalled = isInstalled,
-                        SourceRegistryId = isInstalled ? registry.id : null,
-                        SourceRegistryName = isInstalled ? registry.name : null,
+                        SourceRegistryId = installed?.SourceRegistryId ?? (isFromThisRegistry ? registry.id : null),
+                        SourceRegistryName = installed?.SourceRegistryName ?? (isFromThisRegistry ? registry.name : null),
                         Versions = versionInfo.versions ?? new List<string> { versionInfo.latest },
                         UpdatedAt = versionInfo.updatedAt,
-                        LoadState = ModuleLoadState.NotLoaded
+                        LoadState = isInstalled ? ModuleLoadState.Loaded : ModuleLoadState.NotLoaded
                     };
 
                     info.HasUpdate = isInstalled &&
-                                     !string.IsNullOrEmpty(installedVersion) &&
+                                     !string.IsNullOrEmpty(installed?.InstalledVersion) &&
                                      !string.IsNullOrEmpty(versionInfo.latest) &&
-                                     CompareVersions(versionInfo.latest, installedVersion) > 0;
+                                     CompareVersions(versionInfo.latest, installed.InstalledVersion) > 0;
 
                     result.Add(info);
                 }
@@ -165,10 +173,11 @@ namespace Puffin.Editor.Hub.Services
         }
 
         /// <summary>
-        /// 懒加载模块的 manifest 信息
+        /// 懒加载模块的 manifest 信息（仅用于未安装的远程模块）
         /// </summary>
         public async UniTask<bool> LoadModuleManifestAsync(HubModuleInfo module)
         {
+            // 已安装模块 LoadState 已设为 Loaded，会在此返回
             if (module.LoadState == ModuleLoadState.Loading || module.LoadState == ModuleLoadState.Loaded)
                 return module.LoadState == ModuleLoadState.Loaded;
 

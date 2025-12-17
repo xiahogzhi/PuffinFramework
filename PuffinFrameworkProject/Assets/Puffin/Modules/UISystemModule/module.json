@@ -7,17 +7,8 @@
     "tags": [],
     "unityVersion": "",
     "puffinVersion": "",
-    "dependencies": [
-        "GameDevKit"
-    ],
-    "moduleDependencies": [
-        {
-            "moduleId": "GameDevKit",
-            "version": "",
-            "registryId": "official",
-            "optional": false
-        }
-    ],
+    "dependencies": [],
+    "moduleDependencies": [],
     "envDependencies": [],
     "downloadUrl": "",
     "checksum": "",

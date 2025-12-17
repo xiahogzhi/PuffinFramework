@@ -4,9 +4,7 @@
     "references": [
         "PuffinFramework.Runtime",
         "GameDevKit.Runtime",
-        "PuffinFramework.Editor",
-        "UISystemModule.Runtime",
-        "UISystemModule.Editor"
+        "PuffinFramework.Editor"
     ],
     "includePlatforms": [
         "Editor"

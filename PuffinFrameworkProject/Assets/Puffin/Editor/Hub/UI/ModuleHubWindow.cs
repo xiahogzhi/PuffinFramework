@@ -47,6 +47,9 @@ namespace Puffin.Editor.Hub.UI
         private long _totalBytes;
         private long _downloadSpeed;
 
+        // 环境依赖冲突检测
+        private Dictionary<string, List<(string moduleId, EnvironmentDependency env)>> _envConflicts = new();
+
         // 可拖动面板
         private float _leftPanelWidth = 180f;
         private float _rightPanelWidth = 280f;
@@ -393,6 +396,23 @@ namespace Puffin.Editor.Hub.UI
                 EditorGUILayout.Space(4);
                 EditorGUILayout.LabelField($"模块 ({_filteredModules.Count})", EditorStyles.boldLabel);
                 EditorGUILayout.Space(2);
+
+                // 显示环境依赖冲突警告
+                if (_envConflicts.Count > 0)
+                {
+                    var sourceNames = new[] { "NuGet", "GitHub", "URL", "Release", "UPM" };
+                    var details = string.Join("\n", _envConflicts.Select(kvp =>
+                    {
+                        var configs = string.Join(", ", kvp.Value.Select(v =>
+                        {
+                            var src = sourceNames[v.env.source];
+                            return $"{v.moduleId}:[{src}]v{v.env.version}";
+                        }));
+                        return $"• {kvp.Key}: {configs}";
+                    }));
+                    EditorGUILayout.HelpBox($"⚠ 环境依赖配置冲突:\n{details}", MessageType.Warning);
+                    EditorGUILayout.Space(2);
+                }
 
                 _moduleListScroll = EditorGUILayout.BeginScrollView(_moduleListScroll);
                 {
@@ -820,9 +840,10 @@ namespace Puffin.Editor.Hub.UI
                             EditorGUILayout.LabelField(_selectedModule.ReleaseNotes, EditorStyles.wordWrappedLabel);
                         }
 
-                        // 显示依赖
-                        // 显示依赖模块（优先使用新格式）
+                        // 显示依赖模块（优先使用 Manifest，否则使用 Dependencies 列表）
                         var allDeps = _selectedModule.Manifest?.GetAllDependencies();
+                        if ((allDeps == null || allDeps.Count == 0) && _selectedModule.Dependencies != null && _selectedModule.Dependencies.Count > 0)
+                            allDeps = _selectedModule.Dependencies.Select(d => new ModuleDependency(d)).ToList();
                         if (allDeps != null && allDeps.Count > 0)
                         {
                             EditorGUILayout.Space(5);
@@ -1052,6 +1073,16 @@ namespace Puffin.Editor.Hub.UI
                 }
 
                 ApplyFilter();
+                ScanEnvConflicts();
+
+                // 更新选中的模块引用（指向新的对象）
+                if (_selectedModule != null)
+                {
+                    var selectedId = _selectedModule.ModuleId;
+                    _selectedModule = _installedModules.Find(m => m.ModuleId == selectedId)
+                                      ?? _filteredModules.Find(m => m.ModuleId == selectedId);
+                }
+
                 var totalRemote = 0;
                 foreach (var kvp in _registryModules) totalRemote += kvp.Value.Count;
                 _statusMessage = $"已安装 {_installedModules.Count} 个，远程 {totalRemote} 个";
@@ -1107,6 +1138,9 @@ namespace Puffin.Editor.Hub.UI
                 _selectedVersion = module.LatestVersion;
             }
 
+            // 已安装模块使用本地信息，不从远程加载
+            if (module.IsInstalled) return;
+
             if (registry == null) return;
 
             var manifest = await _registryService.GetManifestAsync(registry, module.ModuleId, module.LatestVersion);
@@ -1116,6 +1150,9 @@ namespace Puffin.Editor.Hub.UI
 
         private async UniTaskVoid LoadVersionDetailAsync(HubModuleInfo module, string version)
         {
+            // 已安装模块且查看当前安装版本时，使用本地信息
+            if (module.IsInstalled && version == module.InstalledVersion) return;
+
             var registryId = !string.IsNullOrEmpty(module.SourceRegistryId) ? module.SourceRegistryId : module.RegistryId;
             var registry = HubSettings.Instance.registries.Find(r => r.id == registryId);
             if (registry == null) return;
@@ -1669,6 +1706,52 @@ namespace Puffin.Editor.Hub.UI
                 var destSubDir = System.IO.Path.Combine(destDir, System.IO.Path.GetFileName(dir));
                 CopyDirectory(dir, destSubDir);
             }
+        }
+
+        /// <summary>
+        /// 扫描环境依赖冲突
+        /// </summary>
+        private void ScanEnvConflicts()
+        {
+            _envConflicts.Clear();
+            var allEnvDeps = new Dictionary<string, List<(string moduleId, EnvironmentDependency env)>>();
+
+            foreach (var module in _installedModules)
+            {
+                var envDeps = module.Manifest?.envDependencies;
+                if (envDeps == null) continue;
+
+                foreach (var env in envDeps)
+                {
+                    if (!allEnvDeps.ContainsKey(env.id))
+                        allEnvDeps[env.id] = new List<(string, EnvironmentDependency)>();
+                    allEnvDeps[env.id].Add((module.ModuleId, env));
+                }
+            }
+
+            // 检测冲突
+            foreach (var kvp in allEnvDeps)
+            {
+                if (kvp.Value.Count <= 1) continue;
+                var first = kvp.Value[0].env;
+                foreach (var item in kvp.Value.Skip(1))
+                {
+                    if (HasEnvConfigConflict(first, item.env))
+                    {
+                        _envConflicts[kvp.Key] = kvp.Value;
+                        break;
+                    }
+                }
+            }
+        }
+
+        private bool HasEnvConfigConflict(EnvironmentDependency a, EnvironmentDependency b)
+        {
+            if (a.source != b.source) return true;
+            if (a.type != b.type) return true;
+            if (!string.IsNullOrEmpty(a.version) && !string.IsNullOrEmpty(b.version) && a.version != b.version) return true;
+            if (!string.IsNullOrEmpty(a.url) && !string.IsNullOrEmpty(b.url) && a.url != b.url) return true;
+            return false;
         }
 
         /// <summary>

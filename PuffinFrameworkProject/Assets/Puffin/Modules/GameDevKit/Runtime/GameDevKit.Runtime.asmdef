@@ -2,8 +2,7 @@
     "name": "GameDevKit.Runtime",
     "rootNamespace": "",
     "references": [
-        "PuffinFramework.Runtime",
-        "UISystemModule.Runtime"
+        "PuffinFramework.Runtime"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
