@@ -17,6 +17,7 @@ namespace Puffin.Editor.Environment.UI
         private Dictionary<string, List<EnvDepInfo>> _moduleEnvDeps;
         private Dictionary<string, bool> _moduleFoldout;
         private Dictionary<string, bool> _installedStatus;
+        private Dictionary<string, List<EnvDepInfo>> _envConflicts; // 配置冲突检测
         private DependencyManager _manager;
         private Vector2 _scrollPos;
         private string _filter;
@@ -27,6 +28,7 @@ namespace Puffin.Editor.Environment.UI
         {
             public DependencyDefinition Definition;
             public string ModuleId;
+            public EnvironmentDependency Original; // 原始配置，用于冲突比较
         }
 
         [MenuItem("Puffin Framework/Environment Manager")]
@@ -83,9 +85,13 @@ namespace Puffin.Editor.Environment.UI
         private void ScanModules()
         {
             _moduleEnvDeps = new Dictionary<string, List<EnvDepInfo>>();
+            _envConflicts = new Dictionary<string, List<EnvDepInfo>>();
             _installedStatus.Clear();
 
             if (!Directory.Exists(ModulesDir)) return;
+
+            // 收集所有环境依赖
+            var allEnvDeps = new Dictionary<string, List<EnvDepInfo>>();
 
             foreach (var moduleDir in Directory.GetDirectories(ModulesDir))
             {
@@ -102,11 +108,18 @@ namespace Puffin.Editor.Environment.UI
                     var deps = new List<EnvDepInfo>();
                     foreach (var envDep in manifest.envDependencies)
                     {
-                        deps.Add(new EnvDepInfo
+                        var info = new EnvDepInfo
                         {
                             Definition = ConvertToDepDefinition(envDep),
-                            ModuleId = moduleId
-                        });
+                            ModuleId = moduleId,
+                            Original = envDep
+                        };
+                        deps.Add(info);
+
+                        // 收集用于冲突检测
+                        if (!allEnvDeps.ContainsKey(envDep.id))
+                            allEnvDeps[envDep.id] = new List<EnvDepInfo>();
+                        allEnvDeps[envDep.id].Add(info);
                     }
 
                     _moduleEnvDeps[moduleId] = deps;
@@ -115,7 +128,32 @@ namespace Puffin.Editor.Environment.UI
                 catch { }
             }
 
+            // 检测配置冲突
+            foreach (var kvp in allEnvDeps)
+            {
+                if (kvp.Value.Count <= 1) continue;
+                var first = kvp.Value[0].Original;
+                foreach (var info in kvp.Value.Skip(1))
+                {
+                    if (HasConfigConflict(first, info.Original))
+                    {
+                        _envConflicts[kvp.Key] = kvp.Value;
+                        break;
+                    }
+                }
+            }
+
             RefreshInstalledStatus();
+        }
+
+        private bool HasConfigConflict(EnvironmentDependency a, EnvironmentDependency b)
+        {
+            // 检查关键配置是否不同
+            if (a.source != b.source) return true;
+            if (a.type != b.type) return true;
+            if (!string.IsNullOrEmpty(a.version) && !string.IsNullOrEmpty(b.version) && a.version != b.version) return true;
+            if (!string.IsNullOrEmpty(a.url) && !string.IsNullOrEmpty(b.url) && a.url != b.url) return true;
+            return false;
         }
 
         private DependencyDefinition ConvertToDepDefinition(EnvironmentDependency envDep)
@@ -178,6 +216,23 @@ namespace Puffin.Editor.Environment.UI
             {
                 EditorGUILayout.HelpBox("未找到任何模块环境依赖配置\n\n环境依赖现在在模块的 module.json 中配置", MessageType.Info);
                 return;
+            }
+
+            // 显示配置冲突警告
+            if (_envConflicts != null && _envConflicts.Count > 0)
+            {
+                foreach (var kvp in _envConflicts)
+                {
+                    var modules = string.Join(", ", kvp.Value.Select(v => v.ModuleId));
+                    var configs = string.Join("\n", kvp.Value.Select(v =>
+                    {
+                        var o = v.Original;
+                        var src = new[] { "NuGet", "GitHub", "URL", "Release", "UPM" }[o.source];
+                        return $"  • {v.ModuleId}: [{src}] v{o.version}";
+                    }));
+                    EditorGUILayout.HelpBox($"⚠ 环境依赖 \"{kvp.Key}\" 配置冲突:\n{configs}", MessageType.Warning);
+                }
+                EditorGUILayout.Space(5);
             }
 
             _scrollPos = EditorGUILayout.BeginScrollView(_scrollPos);
