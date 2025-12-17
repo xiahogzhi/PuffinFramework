@@ -110,7 +110,6 @@ namespace Puffin.Editor.Hub.Data
         public string extractPath;  // 从压缩包中提取的子路径
         public string[] requiredFiles;
         public bool optional;  // 是否可选
-        public bool keepOnUninstall;  // 卸载模块时保留此依赖
         public string[] targetFrameworks;  // NuGet 目标框架
         public string[] dllReferences;    // DLL 引用名称列表
         public string[] asmdefReferences; // 程序集定义引用名称列表

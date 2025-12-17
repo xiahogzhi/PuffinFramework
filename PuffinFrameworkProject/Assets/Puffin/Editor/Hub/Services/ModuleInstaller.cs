@@ -289,9 +289,6 @@ namespace Puffin.Editor.Hub.Services
 
                 OnStatusChanged?.Invoke($"正在卸载: {moduleId}");
 
-                // 获取模块的环境依赖
-                var envDeps = GetModuleEnvDependencies(modulePath);
-
                 // 删除模块目录
                 if (Directory.Exists(modulePath))
                 {
@@ -305,9 +302,6 @@ namespace Puffin.Editor.Hub.Services
                 if (moduleLock != null)
                     InstalledModulesLock.Instance.Remove(moduleId);
 
-                // 清理无依赖的环境依赖
-                CleanupOrphanedEnvDependencies(envDeps, moduleId);
-
                 OnStatusChanged?.Invoke("卸载完成");
                 AssetDatabase.Refresh();
                 await UniTask.Yield();
@@ -317,65 +311,6 @@ namespace Puffin.Editor.Hub.Services
             {
                 Debug.LogError($"[Hub] 卸载异常: {e}");
                 return false;
-            }
-        }
-
-        /// <summary>
-        /// 获取模块的环境依赖
-        /// </summary>
-        private List<EnvironmentDependency> GetModuleEnvDependencies(string modulePath)
-        {
-            var manifestPath = Path.Combine(modulePath, "module.json");
-            if (!File.Exists(manifestPath)) return null;
-
-            try
-            {
-                var json = File.ReadAllText(manifestPath);
-                var manifest = JsonUtility.FromJson<HubModuleManifest>(json);
-                return manifest?.envDependencies?.ToList();
-            }
-            catch { return null; }
-        }
-
-        /// <summary>
-        /// 清理无其他模块依赖的环境依赖
-        /// </summary>
-        private void CleanupOrphanedEnvDependencies(List<EnvironmentDependency> envDeps, string excludeModuleId)
-        {
-            if (envDeps == null || envDeps.Count == 0) return;
-
-            var modulesDir = Path.Combine(Application.dataPath, "Puffin/Modules");
-            if (!Directory.Exists(modulesDir)) return;
-
-            foreach (var envDep in envDeps)
-            {
-                // 标记为保留的依赖不清理
-                if (envDep.keepOnUninstall) continue;
-
-                // 检查是否有其他模块也依赖此环境
-                var hasOtherDependents = false;
-                foreach (var moduleDir in Directory.GetDirectories(modulesDir))
-                {
-                    var otherModuleId = Path.GetFileName(moduleDir);
-                    if (otherModuleId == excludeModuleId) continue;
-
-                    var otherEnvDeps = GetModuleEnvDependencies(moduleDir);
-                    if (otherEnvDeps != null && otherEnvDeps.Exists(d => d.id == envDep.id))
-                    {
-                        hasOtherDependents = true;
-                        break;
-                    }
-                }
-
-                if (!hasOtherDependents)
-                {
-                    var depDef = ConvertToDepDefinition(envDep);
-                    if (_depManager.IsInstalled(depDef))
-                    {
-                        Debug.Log($"[Hub] 清理环境依赖: {envDep.id}");
-                        _depManager.Uninstall(depDef);
-                    }
-                }
             }
         }
 

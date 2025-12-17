@@ -23,7 +23,7 @@ namespace Puffin.Editor.Hub.UI
         private string _asmdefReferencesStr;
 
         private static readonly string[] SourceNames = { "NuGet", "GitHub Repo", "Direct URL", "GitHub Release", "Unity Package" };
-        private static readonly string[] TypeNames = { "DLL", "Source", "Tool" };
+        private static readonly string[] TypeNames = { "DLL", "Source", "Tool", "ReferenceOnly" };
 
         public static void ShowNew(Action<EnvironmentDependency> onSaved)
         {
@@ -67,41 +67,51 @@ namespace Puffin.Editor.Hub.UI
             // 基本信息
             EditorGUILayout.LabelField("基本信息", EditorStyles.boldLabel);
             _dependency.id = EditorGUILayout.TextField("ID *", _dependency.id);
-            _dependency.source = EditorGUILayout.Popup("来源", _dependency.source, SourceNames);
             _dependency.type = EditorGUILayout.Popup("类型", _dependency.type, TypeNames);
-            _dependency.version = EditorGUILayout.TextField("版本", _dependency.version);
 
-            EditorGUILayout.Space(10);
+            var isReferenceOnly = _dependency.type == 3; // ReferenceOnly
 
-            // 来源配置
-            EditorGUILayout.LabelField("来源配置", EditorStyles.boldLabel);
-            switch (_dependency.source)
+            if (isReferenceOnly)
             {
-                case 0: // NuGet
-                    EditorGUILayout.HelpBox("NuGet 包会自动从 nuget.org 下载", MessageType.Info);
-                    _targetFrameworksStr = EditorGUILayout.TextField("目标框架 (逗号分隔)", _targetFrameworksStr);
-                    break;
-                case 1: // GitHub Repo
-                    _dependency.url = EditorGUILayout.TextField("仓库 URL", _dependency.url);
-                    _dependency.extractPath = EditorGUILayout.TextField("提取路径", _dependency.extractPath);
-                    break;
-                case 2: // Direct URL
-                    _dependency.url = EditorGUILayout.TextField("下载 URL", _dependency.url);
-                    _dependency.extractPath = EditorGUILayout.TextField("提取路径", _dependency.extractPath);
-                    break;
-                case 3: // GitHub Release
-                    _dependency.url = EditorGUILayout.TextField("仓库 URL", _dependency.url);
-                    EditorGUILayout.HelpBox("将从 GitHub Release 下载指定版本", MessageType.Info);
-                    break;
+                EditorGUILayout.HelpBox("仅引用类型：不需要下载安装，只添加程序集引用", MessageType.Info);
             }
+            else
+            {
+                _dependency.source = EditorGUILayout.Popup("来源", _dependency.source, SourceNames);
+                _dependency.version = EditorGUILayout.TextField("版本", _dependency.version);
 
-            EditorGUILayout.Space(10);
+                EditorGUILayout.Space(10);
 
-            // 安装配置
-            EditorGUILayout.LabelField("安装配置", EditorStyles.boldLabel);
-            _dependency.installDir = EditorGUILayout.TextField("安装目录", _dependency.installDir);
-            EditorGUILayout.LabelField("必需文件 (逗号分隔):");
-            _requiredFilesStr = EditorGUILayout.TextField(_requiredFilesStr);
+                // 来源配置
+                EditorGUILayout.LabelField("来源配置", EditorStyles.boldLabel);
+                switch (_dependency.source)
+                {
+                    case 0: // NuGet
+                        EditorGUILayout.HelpBox("NuGet 包会自动从 nuget.org 下载", MessageType.Info);
+                        _targetFrameworksStr = EditorGUILayout.TextField("目标框架 (逗号分隔)", _targetFrameworksStr);
+                        break;
+                    case 1: // GitHub Repo
+                        _dependency.url = EditorGUILayout.TextField("仓库 URL", _dependency.url);
+                        _dependency.extractPath = EditorGUILayout.TextField("提取路径", _dependency.extractPath);
+                        break;
+                    case 2: // Direct URL
+                        _dependency.url = EditorGUILayout.TextField("下载 URL", _dependency.url);
+                        _dependency.extractPath = EditorGUILayout.TextField("提取路径", _dependency.extractPath);
+                        break;
+                    case 3: // GitHub Release
+                        _dependency.url = EditorGUILayout.TextField("仓库 URL", _dependency.url);
+                        EditorGUILayout.HelpBox("将从 GitHub Release 下载指定版本", MessageType.Info);
+                        break;
+                }
+
+                EditorGUILayout.Space(10);
+
+                // 安装配置
+                EditorGUILayout.LabelField("安装配置", EditorStyles.boldLabel);
+                _dependency.installDir = EditorGUILayout.TextField("安装目录", _dependency.installDir);
+                EditorGUILayout.LabelField("必需文件 (逗号分隔):");
+                _requiredFilesStr = EditorGUILayout.TextField(_requiredFilesStr);
+            }
 
             EditorGUILayout.Space(10);
 
@@ -117,7 +127,6 @@ namespace Puffin.Editor.Hub.UI
             // 选项
             EditorGUILayout.LabelField("选项", EditorStyles.boldLabel);
             _dependency.optional = EditorGUILayout.Toggle("可选依赖", _dependency.optional);
-            _dependency.keepOnUninstall = EditorGUILayout.Toggle("卸载时保留", _dependency.keepOnUninstall);
 
             EditorGUILayout.EndScrollView();
 

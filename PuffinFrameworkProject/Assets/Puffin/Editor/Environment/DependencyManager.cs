@@ -48,6 +48,10 @@ namespace Puffin.Editor.Environment
 
         public bool IsInstalled(DependencyDefinition dep)
         {
+            // ReferenceOnly 类型不需要安装，始终视为已安装
+            if (dep.type == DependencyType.ReferenceOnly)
+                return true;
+
             if (!_installers.TryGetValue(dep.source, out var installer))
                 return false;
             return installer.IsInstalled(dep, GetInstallPath(dep));
@@ -55,6 +59,13 @@ namespace Puffin.Editor.Environment
 
         public async UniTask<bool> InstallAsync(DependencyDefinition dep, CancellationToken ct = default)
         {
+            // ReferenceOnly 类型不需要安装，直接返回成功
+            if (dep.type == DependencyType.ReferenceOnly)
+            {
+                OnStatusChanged?.Invoke($"{dep.displayName ?? dep.id} 为仅引用类型，无需安装");
+                return true;
+            }
+
             if (!_installers.TryGetValue(dep.source, out var installer))
             {
                 OnStatusChanged?.Invoke($"不支持的安装源: {dep.source}");

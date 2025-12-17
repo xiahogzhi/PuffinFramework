@@ -665,16 +665,6 @@ namespace Puffin.Editor.Hub.UI
                                 if (GUILayout.Button("📦", GUILayout.Width(22), GUILayout.Height(18)))
                                     ExportPackage(_selectedModule);
                             }
-                            else
-                            {
-                                // 未安装模块：删除远程版本（有token）
-                                var delRegistry = HubSettings.Instance.registries.Find(r => r.id == _selectedModule.RegistryId);
-                                if (delRegistry != null && !string.IsNullOrEmpty(delRegistry.authToken) && GUILayout.Button("🗑", GUILayout.Width(22), GUILayout.Height(18)))
-                                {
-                                    var deleteVersion = !string.IsNullOrEmpty(_selectedVersion) ? _selectedVersion : _selectedModule.LatestVersion;
-                                    DeleteRemoteVersionAsync(_selectedModule, deleteVersion, delRegistry).Forget();
-                                }
-                            }
                         }
                         EditorGUILayout.EndHorizontal();
                         EditorGUILayout.Space(3);
@@ -876,14 +866,26 @@ namespace Puffin.Editor.Hub.UI
                             EditorGUILayout.Space(5);
                             EditorGUILayout.LabelField("环境依赖:", EditorStyles.boldLabel);
                             var sourceNames = new[] { "NuGet", "GitHub", "URL", "Release", "UPM" };
+                            var typeNames = new[] { "DLL", "Source", "Tool", "仅引用" };
                             foreach (var env in envDeps)
                             {
-                                var isEnvInstalled = IsEnvDependencyInstalled(env);
-                                var status = isEnvInstalled ? "✓" : (env.optional ? "○" : "⚠");
                                 var opt = env.optional ? " (可选)" : "";
                                 var ver = !string.IsNullOrEmpty(env.version) ? $" v{env.version}" : "";
-                                var style = (isEnvInstalled || env.optional) ? EditorStyles.miniLabel : new GUIStyle(EditorStyles.miniLabel) { normal = { textColor = Color.yellow } };
-                                EditorGUILayout.LabelField($"  {status} {env.id}{ver} [{sourceNames[env.source]}]{opt}", style);
+                                // ReferenceOnly 类型显示类型名，其他显示来源
+                                var typeOrSource = env.type == 3 ? typeNames[env.type] : sourceNames[env.source];
+
+                                // 已安装模块显示环境依赖安装状态
+                                if (_selectedModule.IsInstalled)
+                                {
+                                    var isEnvInstalled = IsEnvDependencyInstalled(env);
+                                    var status = isEnvInstalled ? "✓" : (env.optional ? "○" : "⚠");
+                                    var style = (isEnvInstalled || env.optional) ? EditorStyles.miniLabel : new GUIStyle(EditorStyles.miniLabel) { normal = { textColor = Color.yellow } };
+                                    EditorGUILayout.LabelField($"  {status} {env.id}{ver} [{typeOrSource}]{opt}", style);
+                                }
+                                else
+                                {
+                                    EditorGUILayout.LabelField($"  • {env.id}{ver} [{typeOrSource}]{opt}", EditorStyles.miniLabel);
+                                }
                             }
                         }
 
