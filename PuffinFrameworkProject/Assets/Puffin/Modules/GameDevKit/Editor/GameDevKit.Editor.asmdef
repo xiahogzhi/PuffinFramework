@@ -4,7 +4,8 @@
     "references": [
         "PuffinFramework.Runtime",
         "GameDevKit.Runtime",
-        "PuffinFramework.Editor"
+        "PuffinFramework.Editor",
+        "UniTask"
     ],
     "includePlatforms": [
         "Editor"

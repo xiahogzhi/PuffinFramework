@@ -22,7 +22,7 @@ namespace Puffin.Editor.Hub.UI
         private string _dllReferencesStr;
         private string _asmdefReferencesStr;
 
-        private static readonly string[] SourceNames = { "NuGet", "GitHub Repo", "Direct URL", "GitHub Release", "Unity Package" };
+        private static readonly string[] SourceNames = { "NuGet", "GitHub Repo", "Direct URL", "GitHub Release", "Unity Package", "手动导入" };
         private static readonly string[] TypeNames = { "DLL", "Source", "Tool", "ReferenceOnly" };
 
         public static void ShowNew(Action<EnvironmentDependency> onSaved)
@@ -102,20 +102,35 @@ namespace Puffin.Editor.Hub.UI
                         _dependency.url = EditorGUILayout.TextField("仓库 URL", _dependency.url);
                         EditorGUILayout.HelpBox("将从 GitHub Release 下载指定版本", MessageType.Info);
                         break;
+                    case 4: // Unity Package
+                        _dependency.url = EditorGUILayout.TextField("Git URL (可选)", _dependency.url);
+                        EditorGUILayout.HelpBox("通过 Unity Package Manager 安装，支持版本号或 Git URL", MessageType.Info);
+                        break;
+                    case 5: // ManualImport
+                        _dependency.asmdefName = EditorGUILayout.TextField("程序集定义名称", _dependency.asmdefName);
+                        EditorGUILayout.LabelField("DLL 名称 (逗号分隔):");
+                        _dllReferencesStr = EditorGUILayout.TextField(_dllReferencesStr);
+                        EditorGUILayout.LabelField("必需文件 (逗号分隔):");
+                        _requiredFilesStr = EditorGUILayout.TextField(_requiredFilesStr);
+                        EditorGUILayout.HelpBox("手动导入：检查用户是否已导入所需插件（如 Odin, DOTween）\n支持检查程序集定义(.asmdef)、DLL文件或指定路径\n未导入时将阻止模块安装", MessageType.Info);
+                        break;
                 }
 
-                EditorGUILayout.Space(10);
+                var isManualImport = _dependency.source == 5;
 
-                // 安装配置
-                EditorGUILayout.LabelField("安装配置", EditorStyles.boldLabel);
-                _dependency.installDir = EditorGUILayout.TextField("安装目录", _dependency.installDir);
-                EditorGUILayout.LabelField("必需文件 (逗号分隔):");
-                _requiredFilesStr = EditorGUILayout.TextField(_requiredFilesStr);
+                // 安装配置（ManualImport 不需要）
+                if (!isManualImport)
+                {
+                    EditorGUILayout.Space(10);
+                    EditorGUILayout.LabelField("安装配置", EditorStyles.boldLabel);
+                    _dependency.installDir = EditorGUILayout.TextField("安装目录", _dependency.installDir);
+                    EditorGUILayout.LabelField("必需文件 (逗号分隔):");
+                    _requiredFilesStr = EditorGUILayout.TextField(_requiredFilesStr);
+                }
             }
 
+            // 引用配置（ReferenceOnly 已有，ManualImport 也需要）
             EditorGUILayout.Space(10);
-
-            // 引用配置
             EditorGUILayout.LabelField("引用配置", EditorStyles.boldLabel);
             EditorGUILayout.LabelField("DLL 引用 (逗号分隔):");
             _dllReferencesStr = EditorGUILayout.TextField(_dllReferencesStr);

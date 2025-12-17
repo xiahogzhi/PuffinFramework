@@ -7,9 +7,67 @@
     "tags": [],
     "unityVersion": "",
     "puffinVersion": "",
-    "dependencies": [],
-    "moduleDependencies": [],
-    "envDependencies": [],
+    "dependencies": [
+        "GameDevKit"
+    ],
+    "moduleDependencies": [
+        {
+            "moduleId": "GameDevKit",
+            "version": "",
+            "registryId": "official",
+            "optional": false
+        }
+    ],
+    "envDependencies": [
+        {
+            "id": "UniTask",
+            "source": 0,
+            "type": 3,
+            "url": "",
+            "version": "",
+            "installDir": "",
+            "extractPath": "",
+            "requiredFiles": [],
+            "optional": false,
+            "targetFrameworks": [],
+            "dllReferences": [],
+            "asmdefReferences": [
+                "UniTask"
+            ]
+        },
+        {
+            "id": "DOTween",
+            "source": 0,
+            "type": 3,
+            "url": "",
+            "version": "",
+            "installDir": "",
+            "extractPath": "",
+            "requiredFiles": [],
+            "optional": true,
+            "targetFrameworks": [],
+            "dllReferences": [
+                "DOTween.dll"
+            ],
+            "asmdefReferences": []
+        },
+        {
+            "id": "Sirenix.OdinInspector.Attributes",
+            "source": 0,
+            "type": 3,
+            "url": "",
+            "version": "",
+            "installDir": "",
+            "extractPath": "",
+            "requiredFiles": [],
+            "optional": true,
+            "targetFrameworks": [],
+            "dllReferences": [
+                "Sirenix.OdinInspector.Attributes.dll"
+            ],
+            "asmdefReferences": []
+        }
+    ],
     "downloadUrl": "",
     "checksum": "",
     "size": 0,

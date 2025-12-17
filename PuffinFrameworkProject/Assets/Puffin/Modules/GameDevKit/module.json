@@ -9,7 +9,24 @@
     "puffinVersion": "",
     "dependencies": [],
     "moduleDependencies": [],
-    "envDependencies": [],
+    "envDependencies": [
+        {
+            "id": "UniTask",
+            "source": 0,
+            "type": 3,
+            "url": "",
+            "version": "",
+            "installDir": "",
+            "extractPath": "",
+            "requiredFiles": [],
+            "optional": false,
+            "targetFrameworks": [],
+            "dllReferences": [],
+            "asmdefReferences": [
+                "UniTask"
+            ]
+        }
+    ],
     "downloadUrl": "",
     "checksum": "",
     "size": 0,

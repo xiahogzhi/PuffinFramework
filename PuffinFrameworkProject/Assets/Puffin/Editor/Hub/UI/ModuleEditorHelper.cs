@@ -275,7 +275,7 @@ namespace Puffin.Editor.Hub.UI
 
             if (!data.ShowEnvSection) return;
 
-            var sourceNames = new[] { "NuGet", "GitHub Repo", "Direct URL", "GitHub Release", "Unity Package" };
+            var sourceNames = new[] { "NuGet", "GitHub Repo", "Direct URL", "GitHub Release", "Unity Package", "手动导入" };
 
             for (var i = 0; i < data.EnvDependencies.Count; i++)
             {

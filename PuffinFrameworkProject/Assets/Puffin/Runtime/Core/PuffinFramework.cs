@@ -216,6 +216,15 @@ namespace Puffin.Runtime.Core
         }
 
         /// <summary>
+        /// 向目标对象注入依赖
+        /// </summary>
+        /// <param name="target">目标对象</param>
+        public static void InjectTo(object target)
+        {
+            EffectiveRuntime?.InjectTo(target);
+        }
+
+        /// <summary>
         /// 暂停 Runtime
         /// </summary>
         public static void Pause() => _runtime?.Pause();

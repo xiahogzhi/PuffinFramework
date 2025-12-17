@@ -28,6 +28,7 @@ namespace Puffin.Editor.Hub.Services
         {
             // 只执行一次
             EditorApplication.delayCall -= OnEditorReady;
+            CleanupMissingReferences();
             ResolveAllModuleDependencies();
             ResolveAllEnvDependencies();
         }
@@ -36,6 +37,7 @@ namespace Puffin.Editor.Hub.Services
         {
             if (hasFocus)
             {
+                CleanupMissingReferences();
                 ResolveAllModuleDependencies();
                 ResolveAllEnvDependencies();
             }
@@ -402,7 +404,7 @@ namespace Puffin.Editor.Hub.Services
             if (changed)
             {
                 AssetDatabase.Refresh();
-                Debug.Log("[AsmdefResolver] 环境依赖引用已更新");
+                // Debug.Log("[AsmdefResolver] 环境依赖引用已更新");
             }
         }
 
@@ -424,6 +426,8 @@ namespace Puffin.Editor.Hub.Services
         private static bool AddReferenceIfMissing(string asmdefPath, string referenceName)
         {
             if (!File.Exists(asmdefPath)) return false;
+            // 只添加确实存在的程序集（且不在 ~ 目录中）
+            if (!AsmdefExists(referenceName)) return false;
             var json = File.ReadAllText(asmdefPath);
             var data = JsonUtility.FromJson<AsmdefData>(json);
             if (data.references.Contains(referenceName)) return false;
@@ -452,7 +456,8 @@ namespace Puffin.Editor.Hub.Services
 
             foreach (var dll in dllNames)
             {
-                if (!data.precompiledReferences.Contains(dll))
+                // 只添加确实存在的 DLL（且不在 ~ 目录中）
+                if (!data.precompiledReferences.Contains(dll) && DllExists(dll))
                 {
                     data.precompiledReferences.Add(dll);
                     changed = true;
@@ -488,6 +493,140 @@ namespace Puffin.Editor.Hub.Services
                 File.WriteAllText(asmdefPath, JsonUtility.ToJson(data, true));
             }
             return changed;
+        }
+
+        /// <summary>
+        /// 清理所有模块中丢失的程序集和 DLL 引用
+        /// </summary>
+        public static void CleanupMissingReferences()
+        {
+            var modulesDir = Path.Combine(Application.dataPath, "Puffin/Modules");
+            if (!Directory.Exists(modulesDir)) return;
+
+            var changed = false;
+            foreach (var moduleDir in Directory.GetDirectories(modulesDir))
+            {
+                var runtimeDir = Path.Combine(moduleDir, "Runtime");
+                var editorDir = Path.Combine(moduleDir, "Editor");
+
+                var runtimeAsmdef = Directory.Exists(runtimeDir)
+                    ? Directory.GetFiles(runtimeDir, "*.asmdef", SearchOption.TopDirectoryOnly).FirstOrDefault()
+                    : null;
+                var editorAsmdef = Directory.Exists(editorDir)
+                    ? Directory.GetFiles(editorDir, "*.asmdef", SearchOption.TopDirectoryOnly).FirstOrDefault()
+                    : null;
+
+                if (!string.IsNullOrEmpty(runtimeAsmdef) && CleanupAsmdefReferences(runtimeAsmdef))
+                    changed = true;
+                if (!string.IsNullOrEmpty(editorAsmdef) && CleanupAsmdefReferences(editorAsmdef))
+                    changed = true;
+            }
+
+            if (changed)
+            {
+                AssetDatabase.Refresh();
+                Debug.Log("[AsmdefResolver] 已清理丢失的引用");
+            }
+        }
+
+        /// <summary>
+        /// 清理单个 asmdef 中丢失的引用
+        /// </summary>
+        private static bool CleanupAsmdefReferences(string asmdefPath)
+        {
+            if (!File.Exists(asmdefPath)) return false;
+
+            var json = File.ReadAllText(asmdefPath);
+            var data = JsonUtility.FromJson<AsmdefData>(json);
+            var changed = false;
+
+            // 清理丢失的程序集引用
+            var validRefs = new List<string>();
+            foreach (var refName in data.references)
+            {
+                if (refName.StartsWith("GUID:") || AsmdefExists(refName))
+                    validRefs.Add(refName);
+                else
+                    changed = true;
+            }
+            data.references = validRefs;
+
+            // 清理丢失的 DLL 引用
+            if (data.precompiledReferences.Count > 0)
+            {
+                var validDlls = new List<string>();
+                foreach (var dllName in data.precompiledReferences)
+                {
+                    if (DllExists(dllName))
+                        validDlls.Add(dllName);
+                    else
+                        changed = true;
+                }
+                data.precompiledReferences = validDlls;
+
+                if (data.precompiledReferences.Count == 0)
+                    data.overrideReferences = false;
+            }
+
+            if (changed)
+                File.WriteAllText(asmdefPath, JsonUtility.ToJson(data, true));
+
+            return changed;
+        }
+
+        /// <summary>
+        /// 检查程序集定义是否存在
+        /// </summary>
+        private static bool AsmdefExists(string asmdefName)
+        {
+            var searchPaths = new[]
+            {
+                Application.dataPath,
+                Path.Combine(Application.dataPath, "../Packages"),
+                Path.Combine(Application.dataPath, "../Library/PackageCache")
+            };
+
+            foreach (var basePath in searchPaths)
+            {
+                if (!Directory.Exists(basePath)) continue;
+                try
+                {
+                    var files = Directory.GetFiles(basePath, $"{asmdefName}.asmdef", SearchOption.AllDirectories);
+                    // 跳过带 ~ 的目录（Unity 忽略的目录）
+                    if (files.Any(f => !f.Contains("~"))) return true;
+                }
+                catch { }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 检查 DLL 是否存在
+        /// </summary>
+        private static bool DllExists(string dllName)
+        {
+            if (!dllName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                dllName += ".dll";
+
+            var searchPaths = new[]
+            {
+                Application.dataPath,
+                Path.Combine(Application.dataPath, "../Packages"),
+                Path.Combine(Application.dataPath, "../Library/PackageCache")
+            };
+
+            foreach (var basePath in searchPaths)
+            {
+                if (!Directory.Exists(basePath)) continue;
+                try
+                {
+                    var files = Directory.GetFiles(basePath, dllName, SearchOption.AllDirectories);
+                    // 跳过带 ~ 的目录（Unity 忽略的目录）
+                    if (files.Any(f => !f.Contains("~"))) return true;
+                }
+                catch { }
+            }
+            return false;
         }
 
         private static void WriteAsmdef(string path, string name, string[] references, string[] includePlatforms)

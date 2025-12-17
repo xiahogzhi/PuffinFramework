@@ -3,13 +3,18 @@
     "rootNamespace": "",
     "references": [
         "PuffinFramework.Runtime",
-        "GameDevKit.Runtime"
+        "GameDevKit.Runtime",
+        "UniTask",
+        "UnityEngine.UI"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
-    "overrideReferences": false,
-    "precompiledReferences": [],
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "Sirenix.OdinInspector.Attributes.dll",
+        "DOTween.dll"
+    ],
     "autoReferenced": true,
     "defineConstraints": [],
     "noEngineReferences": false

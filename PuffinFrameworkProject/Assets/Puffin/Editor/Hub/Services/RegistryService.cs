@@ -132,7 +132,6 @@ namespace Puffin.Editor.Hub.Services
                     // 检查是否已安装（优先使用本地信息）
                     installedMap.TryGetValue(moduleId, out var installed);
                     var isInstalled = installed != null;
-                    var isFromThisRegistry = isInstalled && installed.SourceRegistryId == registry.id;
 
                     var info = new HubModuleInfo
                     {
@@ -149,8 +148,9 @@ namespace Puffin.Editor.Hub.Services
                         RegistryId = registry.id,
                         InstalledVersion = installed?.InstalledVersion,
                         IsInstalled = isInstalled,
-                        SourceRegistryId = installed?.SourceRegistryId ?? (isFromThisRegistry ? registry.id : null),
-                        SourceRegistryName = installed?.SourceRegistryName ?? (isFromThisRegistry ? registry.name : null),
+                        // 远程仓库视图中，始终显示当前仓库作为来源（因为模块在此仓库中存在）
+                        SourceRegistryId = registry.id,
+                        SourceRegistryName = registry.name,
                         Versions = versionInfo.versions ?? new List<string> { versionInfo.latest },
                         UpdatedAt = versionInfo.updatedAt,
                         LoadState = isInstalled ? ModuleLoadState.Loaded : ModuleLoadState.NotLoaded

@@ -844,7 +844,18 @@ namespace Puffin.Runtime.Core
 
         private void InjectDependencies(IGameSystem system)
         {
-            var type = system.GetType();
+            InjectTo(system);
+        }
+
+        /// <summary>
+        /// 向任意对象注入依赖
+        /// </summary>
+        /// <param name="target">目标对象</param>
+        public void InjectTo(object target)
+        {
+            if (target == null) return;
+
+            var type = target.GetType();
             var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 
             // 注入字段
@@ -857,7 +868,7 @@ namespace Puffin.Runtime.Core
                 var fieldType = field.FieldType;
                 if (_typeToInstance.TryGetValue(fieldType, out var dep))
                 {
-                    field.SetValue(system, dep);
+                    field.SetValue(target, dep);
                     _logger.Info($"注入 {type.Name}.{field.Name} = {GetSystemName(dep)}");
                 }
                 else if (isInject)
@@ -877,7 +888,7 @@ namespace Puffin.Runtime.Core
                 var propType = prop.PropertyType;
                 if (_typeToInstance.TryGetValue(propType, out var dep))
                 {
-                    prop.SetValue(system, dep);
+                    prop.SetValue(target, dep);
                     _logger.Info($"注入 {type.Name}.{prop.Name} = {GetSystemName(dep)}");
                 }
                 else if (isInject)

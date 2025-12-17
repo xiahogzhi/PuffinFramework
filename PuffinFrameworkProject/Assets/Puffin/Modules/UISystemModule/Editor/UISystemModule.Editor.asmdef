@@ -6,15 +6,19 @@
         "UISystemModule.Runtime",
         "PuffinFramework.Editor",
         "GameDevKit.Runtime",
-        "GameDevKit.Editor"
+        "GameDevKit.Editor",
+        "UniTask"
     ],
     "includePlatforms": [
         "Editor"
     ],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
-    "overrideReferences": false,
-    "precompiledReferences": [],
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "Sirenix.OdinInspector.Attributes.dll",
+        "DOTween.dll"
+    ],
     "autoReferenced": true,
     "defineConstraints": [],
     "noEngineReferences": false

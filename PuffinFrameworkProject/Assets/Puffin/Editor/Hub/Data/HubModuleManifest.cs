@@ -113,6 +113,7 @@ namespace Puffin.Editor.Hub.Data
         public string[] targetFrameworks;  // NuGet 目标框架
         public string[] dllReferences;    // DLL 引用名称列表
         public string[] asmdefReferences; // 程序集定义引用名称列表
+        public string asmdefName;  // ManualImport: 要检查的程序集定义名称
     }
 
     /// <summary>
