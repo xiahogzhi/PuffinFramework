@@ -1,6 +1,6 @@
 using System;
 
-namespace Puffin.Runtime.Behaviours.Attributes
+namespace Puffin.Modules.GameDevKit.Runtime.Behaviours.Attributes
 {
     /// <summary>
     /// 父节点引用特性 - 从父节点链获取组件

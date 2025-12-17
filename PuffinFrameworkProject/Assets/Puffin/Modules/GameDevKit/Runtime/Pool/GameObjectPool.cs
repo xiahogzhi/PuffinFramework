@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace Puffin.Runtime.Tools.Pool
+namespace Puffin.Modules.GameDevKit.Runtime.Pool
 {
     /// <summary>
     /// GameObject 对象池

@@ -1,7 +1,7 @@
 using System;
-using Puffin.Runtime.Behaviours.Enums;
+using Puffin.Modules.GameDevKit.Runtime.Behaviours.Enums;
 
-namespace Puffin.Runtime.Behaviours.Attributes
+namespace Puffin.Modules.GameDevKit.Runtime.Behaviours.Attributes
 {
     /// <summary>
     /// 自动引用特性 - 从自身或子节点获取第一个匹配的组件

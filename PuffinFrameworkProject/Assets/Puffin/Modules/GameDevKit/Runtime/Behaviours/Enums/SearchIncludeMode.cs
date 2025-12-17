@@ -1,6 +1,6 @@
 using System;
 
-namespace Puffin.Runtime.Behaviours.Enums
+namespace Puffin.Modules.GameDevKit.Runtime.Behaviours.Enums
 {
     /// <summary>
     /// 引用搜索模式

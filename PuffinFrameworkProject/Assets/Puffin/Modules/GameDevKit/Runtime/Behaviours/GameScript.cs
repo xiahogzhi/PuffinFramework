@@ -1,7 +1,7 @@
 using Puffin.Runtime.Core;
 using UnityEngine;
 
-namespace Puffin.Runtime.Behaviours
+namespace Puffin.Modules.GameDevKit.Runtime.Behaviours
 {
     /// <summary>
     /// 游戏脚本基类，提供生命周期管理和事件收集功能

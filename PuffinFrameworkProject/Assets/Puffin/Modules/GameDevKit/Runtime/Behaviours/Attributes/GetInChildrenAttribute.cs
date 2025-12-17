@@ -1,6 +1,6 @@
 using System;
 
-namespace Puffin.Runtime.Behaviours.Attributes
+namespace Puffin.Modules.GameDevKit.Runtime.Behaviours.Attributes
 {
     /// <summary>
     /// 子节点引用特性 - 递归搜索所有子节点获取组件

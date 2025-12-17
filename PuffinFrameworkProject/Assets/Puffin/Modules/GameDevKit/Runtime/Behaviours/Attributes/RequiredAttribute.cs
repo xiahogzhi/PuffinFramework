@@ -1,6 +1,6 @@
 using System;
 
-namespace Puffin.Runtime.Behaviours.Attributes
+namespace Puffin.Modules.GameDevKit.Runtime.Behaviours.Attributes
 {
     /// <summary>
     /// 必填验证特性 - 未赋值时在编辑器显示警告

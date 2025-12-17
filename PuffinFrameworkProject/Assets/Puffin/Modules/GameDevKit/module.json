@@ -1,0 +1,18 @@
+{
+    "moduleId": "GameDevKit",
+    "displayName": "游戏开发包",
+    "version": "1.0.0",
+    "author": "InputName",
+    "description": "包含一些通用的开发包脚本以及工具.",
+    "tags": [],
+    "unityVersion": "",
+    "puffinVersion": "",
+    "dependencies": [],
+    "moduleDependencies": [],
+    "envDependencies": [],
+    "downloadUrl": "",
+    "checksum": "",
+    "size": 0,
+    "releaseNotes": "",
+    "publishedAt": ""
+}

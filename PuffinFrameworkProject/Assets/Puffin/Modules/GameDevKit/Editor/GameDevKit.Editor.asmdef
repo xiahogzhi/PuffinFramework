@@ -1,0 +1,21 @@
+{
+    "name": "GameDevKit.Editor",
+    "rootNamespace": "",
+    "references": [
+        "PuffinFramework.Runtime",
+        "GameDevKit.Runtime",
+        "PuffinFramework.Editor",
+        "UISystemModule.Runtime",
+        "UISystemModule.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "noEngineReferences": false
+}

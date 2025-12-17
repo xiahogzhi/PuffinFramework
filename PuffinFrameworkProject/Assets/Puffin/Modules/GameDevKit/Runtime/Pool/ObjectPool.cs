@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Puffin.Runtime.Tools.Pool
+namespace Puffin.Modules.GameDevKit.Runtime.Pool
 {
     /// <summary>
     /// 通用对象池

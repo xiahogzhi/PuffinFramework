@@ -20,6 +20,8 @@ namespace Puffin.Editor.Hub.Services
         {
             // 延迟执行，避免在编辑器初始化时出问题
             EditorApplication.delayCall += OnEditorReady;
+            // 窗口获取焦点时刷新依赖引用
+            EditorApplication.focusChanged += OnFocusChanged;
         }
 
         private static void OnEditorReady()
@@ -28,6 +30,15 @@ namespace Puffin.Editor.Hub.Services
             EditorApplication.delayCall -= OnEditorReady;
             ResolveAllModuleDependencies();
             ResolveAllEnvDependencies();
+        }
+
+        private static void OnFocusChanged(bool hasFocus)
+        {
+            if (hasFocus)
+            {
+                ResolveAllModuleDependencies();
+                ResolveAllEnvDependencies();
+            }
         }
 
         // [MenuItem("Puffin Framework/解析程序集引用")]

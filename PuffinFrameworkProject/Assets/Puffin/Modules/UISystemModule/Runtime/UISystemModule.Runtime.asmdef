@@ -1,0 +1,16 @@
+{
+    "name": "UISystemModule.Runtime",
+    "rootNamespace": "",
+    "references": [
+        "PuffinFramework.Runtime",
+        "GameDevKit.Runtime"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "noEngineReferences": false
+}

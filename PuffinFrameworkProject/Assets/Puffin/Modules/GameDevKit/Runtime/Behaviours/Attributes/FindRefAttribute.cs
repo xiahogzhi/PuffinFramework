@@ -1,6 +1,6 @@
 using System;
 
-namespace Puffin.Runtime.Behaviours.Attributes
+namespace Puffin.Modules.GameDevKit.Runtime.Behaviours.Attributes
 {
     /// <summary>
     /// 路径引用特性 - 通过指定路径查找组件

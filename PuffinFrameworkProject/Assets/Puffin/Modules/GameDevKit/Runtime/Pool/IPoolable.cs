@@ -1,4 +1,4 @@
-namespace Puffin.Runtime.Tools.Pool
+namespace Puffin.Modules.GameDevKit.Runtime.Pool
 {
     /// <summary>
     /// 可池化对象接口

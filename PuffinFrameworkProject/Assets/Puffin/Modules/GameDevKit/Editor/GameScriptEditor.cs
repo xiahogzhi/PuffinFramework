@@ -4,14 +4,14 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Text.RegularExpressions;
-using Puffin.Runtime.Behaviours;
-using Puffin.Runtime.Behaviours.Attributes;
-using Puffin.Runtime.Behaviours.Enums;
+using Puffin.Modules.GameDevKit.Runtime.Behaviours;
+using Puffin.Modules.GameDevKit.Runtime.Behaviours.Attributes;
+using Puffin.Modules.GameDevKit.Runtime.Behaviours.Enums;
 using UnityEditor;
 using UnityEngine;
 using L = Puffin.Editor.Localization.EditorLocalization;
 
-namespace Puffin.Editor.Core
+namespace Puffin.Modules.GameDevKit.Editor
 {
     /// <summary>
     /// GameScript 编辑器扩展，提供自动引用赋值功能

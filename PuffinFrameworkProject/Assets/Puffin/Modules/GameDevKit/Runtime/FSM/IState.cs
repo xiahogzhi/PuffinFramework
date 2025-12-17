@@ -1,4 +1,4 @@
-namespace Puffin.Runtime.Tools.FSM
+namespace Puffin.Modules.GameDevKit.Runtime.FSM
 {
     /// <summary>
     /// 状态接口

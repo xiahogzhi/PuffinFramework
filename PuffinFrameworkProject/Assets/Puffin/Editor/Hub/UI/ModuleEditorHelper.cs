@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Puffin.Editor.Hub.Data;
 using UnityEditor;
@@ -33,8 +34,65 @@ namespace Puffin.Editor.Hub.UI
         {
             var list = Dependencies.Select(d => d.moduleId).ToList();
             if (!string.IsNullOrEmpty(CurrentModuleId))
+            {
                 list.Add(CurrentModuleId);
-            return list;
+                // 排除依赖当前模块的模块（防止循环依赖）
+                list.AddRange(GetModulesDependingOn(CurrentModuleId));
+            }
+            return list.Distinct().ToList();
+        }
+
+        /// <summary>
+        /// 获取所有依赖指定模块的模块ID（递归）
+        /// </summary>
+        private List<string> GetModulesDependingOn(string targetModuleId)
+        {
+            var result = new HashSet<string>();
+            var modulesDir = Path.Combine(Application.dataPath, "Puffin/Modules");
+            if (!Directory.Exists(modulesDir)) return result.ToList();
+
+            // 构建依赖图：moduleId -> 它依赖的模块列表
+            var depGraph = new Dictionary<string, List<string>>();
+            foreach (var dir in Directory.GetDirectories(modulesDir))
+            {
+                var moduleId = Path.GetFileName(dir);
+                var manifestPath = Path.Combine(dir, "module.json");
+                if (!File.Exists(manifestPath)) continue;
+
+                try
+                {
+                    var json = File.ReadAllText(manifestPath);
+                    var manifest = JsonUtility.FromJson<HubModuleManifest>(json);
+                    var deps = manifest.GetAllDependencies().Select(d => d.moduleId).ToList();
+                    depGraph[moduleId] = deps;
+                }
+                catch { depGraph[moduleId] = new List<string>(); }
+            }
+
+            // 找出所有直接或间接依赖 targetModuleId 的模块
+            foreach (var moduleId in depGraph.Keys)
+            {
+                if (DependsOn(moduleId, targetModuleId, depGraph, new HashSet<string>()))
+                    result.Add(moduleId);
+            }
+
+            return result.ToList();
+        }
+
+        private bool DependsOn(string moduleId, string targetId, Dictionary<string, List<string>> graph, HashSet<string> visited)
+        {
+            if (visited.Contains(moduleId)) return false;
+            visited.Add(moduleId);
+
+            if (!graph.TryGetValue(moduleId, out var deps)) return false;
+            if (deps.Contains(targetId)) return true;
+
+            foreach (var dep in deps)
+            {
+                if (DependsOn(dep, targetId, graph, visited))
+                    return true;
+            }
+            return false;
         }
     }
 

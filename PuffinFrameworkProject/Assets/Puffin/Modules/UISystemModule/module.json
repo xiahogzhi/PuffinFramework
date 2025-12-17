@@ -1,0 +1,27 @@
+{
+    "moduleId": "UISystemModule",
+    "displayName": "UI系统",
+    "version": "1.0.0",
+    "author": "InputName",
+    "description": "UI系统模块，支持层级管理，自动设置Mask，动画播放，Pop类型UI，主类型UI，附加UI",
+    "tags": [],
+    "unityVersion": "",
+    "puffinVersion": "",
+    "dependencies": [
+        "GameDevKit"
+    ],
+    "moduleDependencies": [
+        {
+            "moduleId": "GameDevKit",
+            "version": "",
+            "registryId": "official",
+            "optional": false
+        }
+    ],
+    "envDependencies": [],
+    "downloadUrl": "",
+    "checksum": "",
+    "size": 0,
+    "releaseNotes": "",
+    "publishedAt": ""
+}
