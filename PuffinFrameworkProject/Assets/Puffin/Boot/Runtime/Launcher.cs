@@ -91,7 +91,7 @@ namespace Puffin.Boot.Runtime
 
                 // 创建编辑器专用 Runtime
                 var context = new SetupContext();
-                context.Logger = new DefaultLogger();
+                context.Logger = new PuffinLogger();
                 context.ScannerConfig = scannerConfig;
                 context.runtimeConfig = runtimeConfig;
 
@@ -239,19 +239,13 @@ namespace Puffin.Boot.Runtime
         }
 #endif
 
-        // private void Awake()
-        // {
-        //     // UnityEngine.Rendering.DebugManager.instance.enableRuntimeUI = false;
-        //     DontDestroyOnLoad(gameObject);
-        // }
-
         /// <summary>
         /// 安装环境
         /// </summary>
         public virtual void Setup()
         {
             SetupContext context = new SetupContext();
-            context.Logger = new DefaultLogger();
+            context.Logger = new PuffinLogger();
             context.ResourcesLoader = new DefaultResourceLoader();
             PuffinFramework.Setup(context);
         }

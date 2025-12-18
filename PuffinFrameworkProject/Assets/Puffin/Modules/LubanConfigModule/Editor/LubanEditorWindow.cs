@@ -33,7 +33,7 @@ namespace Puffin.Modules.LubanConfigModule.Editor
         private DependencyDefinition _depLubanTool;
         private DependencyDefinition _depTemplate;
 
-        [MenuItem("Puffin Framework/Config/Luban Editor")]
+        [MenuItem("Puffin/Config/Luban Editor")]
         public static void ShowWindow() => GetWindow<LubanEditorWindow>("Luban Editor");
 
         private void OnEnable()
@@ -344,7 +344,7 @@ namespace Puffin.Modules.ConfigModule.Runtime
                 File.Copy(file, Path.Combine(destDir, Path.GetFileName(file)), true);
         }
 
-        [MenuItem("Puffin Framework/Config/Generate Config &q")]
+        [MenuItem("Puffin/Config/Generate Config &q")]
         public static void GenerateConfigMenu()
         {
             // 检查依赖是否安装

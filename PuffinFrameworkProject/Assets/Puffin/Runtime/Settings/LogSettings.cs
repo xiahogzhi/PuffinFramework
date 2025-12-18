@@ -31,7 +31,7 @@ namespace Puffin.Runtime.Settings
     }
 
     [SettingsPath("LogSettings")]
-    // [CreateAssetMenu(fileName = "LogSettings", menuName = "PuffinFramework/Log Settings")]
+    [PuffinSetting("Log")]
     public class LogSettings : SettingsBase<LogSettings>
     {
 

@@ -71,6 +71,12 @@ namespace Puffin.Runtime.Core
         private readonly Dictionary<IGameSystem, UpdateIntervalData> _updateIntervals = new();
         private int _frameCount;
 
+        // 系统元数据缓存（避免重复反射）
+        private readonly Dictionary<Type, SystemMetadata> _metadataCache = new();
+
+        // 注入信息缓存
+        private readonly Dictionary<Type, InjectionInfo> _injectionCache = new();
+
         /// <summary>
         /// Runtime 是否暂停
         /// </summary>
@@ -121,23 +127,24 @@ namespace Puffin.Runtime.Core
         public void RemoveSymbol(string symbol) => _definedSymbols.Remove(symbol);
 
         /// <summary>
-        /// 获取系统名称（从 SystemAliasAttribute 或类型名）
+        /// 获取系统名称（从缓存或 SystemAliasAttribute）
         /// </summary>
-        public static string GetSystemName(IGameSystem system) => GetSystemName(system.GetType());
+        public string GetSystemName(IGameSystem system) => GetSystemName(system.GetType());
 
-        public static string GetSystemName(Type type)
+        public string GetSystemName(Type type)
         {
-            return type.GetCustomAttribute<SystemAliasAttribute>()?.Alias ?? type.Name;
+            var meta = GetOrCreateMetadata(type);
+            return meta.Alias ?? meta.Name;
         }
 
         /// <summary>
-        /// 获取系统优先级（从 SystemPriorityAttribute）
+        /// 获取系统优先级（从缓存或 SystemPriorityAttribute）
         /// </summary>
-        public static int GetSystemPriority(IGameSystem system) => GetSystemPriority(system.GetType());
+        public int GetSystemPriority(IGameSystem system) => GetSystemPriority(system.GetType());
 
-        public static int GetSystemPriority(Type type)
+        public int GetSystemPriority(Type type)
         {
-            return type.GetCustomAttribute<SystemPriorityAttribute>()?.Priority ?? 0;
+            return GetOrCreateMetadata(type).Priority;
         }
 
 
@@ -213,14 +220,15 @@ namespace Puffin.Runtime.Core
             {
                 var perf = _performanceData.GetValueOrDefault(sys);
                 var type = sys.GetType();
+                var meta = GetOrCreateMetadata(type);
                 return new SystemStatus
                 {
-                    Name = type.Name,
-                    Alias = type.GetCustomAttribute<SystemAliasAttribute>()?.Alias,
+                    Name = meta.Name,
+                    Alias = meta.Alias,
                     Type = type,
                     IsEnabled = sys is not ISystemEnabled {Enabled: false},
                     IsInitialized = _initializedSystems.Contains(sys),
-                    Priority = GetSystemPriority(type),
+                    Priority = meta.Priority,
                     LastUpdateMs = perf?.LastMs ?? 0,
                     AverageUpdateMs = perf?.AverageMs ?? 0,
                     CanToggle = sys is ISystemEnabled,
@@ -444,19 +452,13 @@ namespace Puffin.Runtime.Core
             TryAddEvent(system, _registerList);
             TryAddEvent(system, _initAsyncList);
 
-            // 注册别名
-            var aliasAttr = type.GetCustomAttribute<SystemAliasAttribute>();
-            if (aliasAttr != null && !string.IsNullOrEmpty(aliasAttr.Alias))
-            {
-                _aliasToInstance[aliasAttr.Alias] = system;
-            }
+            // 使用缓存的元数据注册别名和 Update 间隔
+            var meta = GetOrCreateMetadata(type);
+            if (!string.IsNullOrEmpty(meta.Alias))
+                _aliasToInstance[meta.Alias] = system;
 
-            // 注册 Update 间隔
-            var intervalAttr = type.GetCustomAttribute<UpdateIntervalAttribute>();
-            if (intervalAttr != null && intervalAttr.FrameInterval > 1)
-            {
-                _updateIntervals[system] = new UpdateIntervalData(intervalAttr.FrameInterval);
-            }
+            if (meta.UpdateInterval > 1)
+                _updateIntervals[system] = new UpdateIntervalData(meta.UpdateInterval);
 
             if (!IsEditorMode)
                 _logger.Info($"注册系统: {GetSystemName(system)}");
@@ -599,81 +601,31 @@ namespace Puffin.Runtime.Core
         public void FixedUpdate(float deltaTime)
         {
             if (IsPaused) return;
-
-            foreach (var sys in _fixedUpdateList)
-            {
-                if (sys is ISystemEnabled {Enabled: false}) continue;
-                try
-                {
-                    sys.OnFixedUpdate(deltaTime);
-                }
-                catch (Exception e)
-                {
-                    _logger.Exception(e);
-                }
-            }
+            InvokeLifecycle(_fixedUpdateList, sys => sys.OnFixedUpdate(deltaTime));
         }
 
         public void LateUpdate(float deltaTime)
         {
             if (IsPaused) return;
-
-            foreach (var sys in _lateUpdateList)
-            {
-                if (sys is ISystemEnabled {Enabled: false}) continue;
-                try
-                {
-                    sys.OnLateUpdate(deltaTime);
-                }
-                catch (Exception e)
-                {
-                    _logger.Exception(e);
-                }
-            }
+            InvokeLifecycle(_lateUpdateList, sys => sys.OnLateUpdate(deltaTime));
         }
 
-        public void OnApplicationQuit()
-        {
-            foreach (var sys in _quitList)
-            {
-                try
-                {
-                    sys.OnApplicationQuit();
-                }
-                catch (Exception e)
-                {
-                    _logger.Exception(e);
-                }
-            }
-        }
+        public void OnApplicationQuit() =>
+            InvokeLifecycle(_quitList, sys => sys.OnApplicationQuit(), checkEnabled: false);
 
-        public void OnApplicationFocus(bool focus)
-        {
-            foreach (var sys in _focusList)
-            {
-                try
-                {
-                    sys.OnApplicationFocus(focus);
-                }
-                catch (Exception e)
-                {
-                    _logger.Exception(e);
-                }
-            }
-        }
+        public void OnApplicationFocus(bool focus) =>
+            InvokeLifecycle(_focusList, sys => sys.OnApplicationFocus(focus), checkEnabled: false);
 
-        public void OnApplicationPause(bool pause)
+        public void OnApplicationPause(bool pause) =>
+            InvokeLifecycle(_pauseList, sys => sys.OnApplicationPause(pause), checkEnabled: false);
+
+        private void InvokeLifecycle<T>(List<T> list, Action<T> action, bool checkEnabled = true)
         {
-            foreach (var sys in _pauseList)
+            foreach (var sys in list)
             {
-                try
-                {
-                    sys.OnApplicationPause(pause);
-                }
-                catch (Exception e)
-                {
-                    _logger.Exception(e);
-                }
+                if (checkEnabled && sys is ISystemEnabled {Enabled: false}) continue;
+                try { action(sys); }
+                catch (Exception e) { _logger.Exception(e); }
             }
         }
 
@@ -848,7 +800,7 @@ namespace Puffin.Runtime.Core
         }
 
         /// <summary>
-        /// 向任意对象注入依赖
+        /// 向任意对象注入依赖（使用缓存的注入信息）
         /// </summary>
         /// <param name="target">目标对象</param>
         public void InjectTo(object target)
@@ -856,44 +808,33 @@ namespace Puffin.Runtime.Core
             if (target == null) return;
 
             var type = target.GetType();
-            var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            var info = GetOrCreateInjectionInfo(type);
 
             // 注入字段
-            foreach (var field in type.GetFields(flags))
+            foreach (var (field, isWeak) in info.Fields)
             {
-                var isInject = field.GetCustomAttribute<InjectAttribute>() != null;
-                var isWeakInject = field.GetCustomAttribute<WeakInjectAttribute>() != null;
-                if (!isInject && !isWeakInject) continue;
-
-                var fieldType = field.FieldType;
-                if (_typeToInstance.TryGetValue(fieldType, out var dep))
+                if (_typeToInstance.TryGetValue(field.FieldType, out var dep))
                 {
                     field.SetValue(target, dep);
                     _logger.Info($"注入 {type.Name}.{field.Name} = {GetSystemName(dep)}");
                 }
-                else if (isInject)
+                else if (!isWeak)
                 {
-                    _logger.Warning($"注入失败 {type.Name}.{field.Name}: 未找到 {fieldType.Name}");
+                    _logger.Warning($"注入失败 {type.Name}.{field.Name}: 未找到 {field.FieldType.Name}");
                 }
             }
 
             // 注入属性
-            foreach (var prop in type.GetProperties(flags))
+            foreach (var (prop, isWeak) in info.Properties)
             {
-                var isInject = prop.GetCustomAttribute<InjectAttribute>() != null;
-                var isWeakInject = prop.GetCustomAttribute<WeakInjectAttribute>() != null;
-                if (!isInject && !isWeakInject) continue;
-                if (!prop.CanWrite) continue;
-
-                var propType = prop.PropertyType;
-                if (_typeToInstance.TryGetValue(propType, out var dep))
+                if (_typeToInstance.TryGetValue(prop.PropertyType, out var dep))
                 {
                     prop.SetValue(target, dep);
                     _logger.Info($"注入 {type.Name}.{prop.Name} = {GetSystemName(dep)}");
                 }
-                else if (isInject)
+                else if (!isWeak)
                 {
-                    _logger.Warning($"注入失败 {type.Name}.{prop.Name}: 未找到 {propType.Name}");
+                    _logger.Warning($"注入失败 {type.Name}.{prop.Name}: 未找到 {prop.PropertyType.Name}");
                 }
             }
         }
@@ -948,6 +889,73 @@ namespace Puffin.Runtime.Core
 
                 return false;
             }
+        }
+
+        #endregion
+
+        #region 元数据缓存
+
+        private class SystemMetadata
+        {
+            public string Name;
+            public string Alias;
+            public int Priority;
+            public int UpdateInterval;
+        }
+
+        private SystemMetadata GetOrCreateMetadata(Type type)
+        {
+            if (_metadataCache.TryGetValue(type, out var meta))
+                return meta;
+
+            var aliasAttr = type.GetCustomAttribute<SystemAliasAttribute>();
+            var priorityAttr = type.GetCustomAttribute<SystemPriorityAttribute>();
+            var intervalAttr = type.GetCustomAttribute<UpdateIntervalAttribute>();
+
+            meta = new SystemMetadata
+            {
+                Name = type.Name,
+                Alias = aliasAttr?.Alias,
+                Priority = priorityAttr?.Priority ?? 0,
+                UpdateInterval = intervalAttr?.FrameInterval ?? 0
+            };
+            _metadataCache[type] = meta;
+            return meta;
+        }
+
+        private class InjectionInfo
+        {
+            public List<(FieldInfo field, bool isWeak)> Fields = new();
+            public List<(PropertyInfo prop, bool isWeak)> Properties = new();
+        }
+
+        private InjectionInfo GetOrCreateInjectionInfo(Type type)
+        {
+            if (_injectionCache.TryGetValue(type, out var info))
+                return info;
+
+            info = new InjectionInfo();
+            var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+
+            foreach (var field in type.GetFields(flags))
+            {
+                var isInject = field.GetCustomAttribute<InjectAttribute>() != null;
+                var isWeakInject = field.GetCustomAttribute<WeakInjectAttribute>() != null;
+                if (isInject || isWeakInject)
+                    info.Fields.Add((field, isWeakInject));
+            }
+
+            foreach (var prop in type.GetProperties(flags))
+            {
+                if (!prop.CanWrite) continue;
+                var isInject = prop.GetCustomAttribute<InjectAttribute>() != null;
+                var isWeakInject = prop.GetCustomAttribute<WeakInjectAttribute>() != null;
+                if (isInject || isWeakInject)
+                    info.Properties.Add((prop, isWeakInject));
+            }
+
+            _injectionCache[type] = info;
+            return info;
         }
 
         #endregion

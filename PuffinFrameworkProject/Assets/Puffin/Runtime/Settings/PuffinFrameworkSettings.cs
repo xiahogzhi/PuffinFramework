@@ -43,6 +43,7 @@ namespace Puffin.Runtime.Settings
     /// 框架配置
     /// </summary>
     [SettingsPath("PuffinSetting")]
+    [PuffinSetting("Preference")]
     public class PuffinSettings : SettingsBase<PuffinSettings>
     {
         [Header("扫描配置")] [Tooltip("扫描模式")] public ScanMode scanMode = ScanMode.All;

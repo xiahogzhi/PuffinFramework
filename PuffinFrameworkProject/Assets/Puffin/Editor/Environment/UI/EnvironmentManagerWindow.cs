@@ -31,7 +31,7 @@ namespace Puffin.Editor.Environment.UI
             public EnvironmentDependency Original; // 原始配置，用于冲突比较
         }
 
-        [MenuItem("Puffin Framework/Environment Manager")]
+        [MenuItem("Puffin/Environment Manager")]
         public static void ShowWindow() => GetWindow<EnvironmentManagerWindow>("环境管理器");
 
         private void OnEnable()

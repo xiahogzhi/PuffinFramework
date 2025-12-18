@@ -39,7 +39,7 @@ namespace Puffin.Editor.Core
 
         private enum SortMode { Priority, Name, UpdateTime }
 
-        [MenuItem("Puffin Framework/System Monitor")]
+        [MenuItem("Puffin/System Monitor")]
         public static void ShowWindow()
         {
             GetWindow<SystemMonitorWindow>("System Monitor");

@@ -40,24 +40,24 @@ namespace Puffin.Runtime.Core
         /// <summary>
         /// 日志
         /// </summary>
-        public static IPuffinLogger Logger { private set; get; }
+        public static IPuffinLogger Logger { get; private set; }
 
         /// <summary>
         /// 资源加载器
         /// </summary>
-        public static IResourcesLoader ResourcesLoader { private set; get; }
+        public static IResourcesLoader ResourcesLoader { get; private set; }
 
         /// <summary>
         /// 扫描配置
         /// </summary>
-        public static ScannerConfig ScannerConfig { private set; get; }
+        public static ScannerConfig ScannerConfig { get; private set; }
 
         /// <summary>
         /// 运行时配置
         /// </summary>
-        public static RuntimeConfig RuntimeConfig { private set; get; }
+        public static RuntimeConfig RuntimeConfig { get; private set; }
 
-        public static bool IsSetup { private set; get; }
+        public static bool IsSetup { get; private set; }
 
         /// <summary>
         /// Runtime 实例
@@ -105,7 +105,9 @@ namespace Puffin.Runtime.Core
             ResourcesLoader = null;
             ScannerConfig = null;
             RuntimeConfig = null;
+#if UNITY_EDITOR
             _editorRuntime = null;
+#endif
             IsApplicationStarted = false;
             IsInitialized = false;
             IsInitializing = false;
@@ -123,7 +125,7 @@ namespace Puffin.Runtime.Core
             if (IsSetup) throw new Exception("PuffinFramework is already Setup.");
 
             ResourcesLoader = setupContext.ResourcesLoader ?? new DefaultResourceLoader();
-            Logger = setupContext.Logger ?? new DefaultLogger();
+            Logger = setupContext.Logger ?? new PuffinLogger();
             ScannerConfig = setupContext.ScannerConfig ?? PuffinSettings.Instance.ToScannerConfig();
             RuntimeConfig = setupContext.runtimeConfig ?? PuffinSettings.Instance.ToRuntimeConfig();
             IsSetup = true;
@@ -155,7 +157,7 @@ namespace Puffin.Runtime.Core
 
             LogSystemInfo();
 
-            var totalWatch = new Stopwatch();
+            var totalWatch = Stopwatch.StartNew();
 
             IsApplicationStarted = true;
 

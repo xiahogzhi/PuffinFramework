@@ -58,7 +58,7 @@ namespace Puffin.Editor.Core
         private Dictionary<string, bool> _groupFoldouts = new();
         private const string CoreGroupName = "Core";
 
-        [MenuItem("Puffin Framework/System Registry")]
+        [MenuItem("Puffin/System Registry")]
         public static void ShowWindow()
         {
             GetWindow<SystemRegistryWindow>("System Registry");

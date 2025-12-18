@@ -34,6 +34,8 @@ namespace Puffin.Editor.Hub.UI
         private string _selectedRegistryId; // null = 全部, "installed" = 已安装
 
         private const string PrefKeySelectedRegistry = "PuffinHub_SelectedRegistry";
+        private const string PrefKeyLeftPanelWidth = "PuffinHub_LeftPanelWidth";
+        private const string PrefKeyRightPanelWidth = "PuffinHub_RightPanelWidth";
 
         private Vector2 _registryScroll;
         private Vector2 _moduleListScroll;
@@ -65,7 +67,7 @@ namespace Puffin.Editor.Hub.UI
         private static readonly Color PanelBgColor = new(0.22f, 0.22f, 0.22f);
         private static readonly Color SplitterColor = new(0.12f, 0.12f, 0.12f);
 
-        [MenuItem("Puffin Framework/Module Manager", false, 10)]
+        [MenuItem("Puffin/Module Manager", false, 10)]
         public static void ShowWindow()
         {
             var window = GetWindow<ModuleHubWindow>("Module Manager");
@@ -103,6 +105,10 @@ namespace Puffin.Editor.Hub.UI
             // 恢复选择的仓库源
             var saved = EditorPrefs.GetString(PrefKeySelectedRegistry, "");
             _selectedRegistryId = string.IsNullOrEmpty(saved) ? null : saved;
+
+            // 恢复面板宽度
+            _leftPanelWidth = EditorPrefs.GetFloat(PrefKeyLeftPanelWidth, 180f);
+            _rightPanelWidth = EditorPrefs.GetFloat(PrefKeyRightPanelWidth, 280f);
 
             RefreshModulesAsync().Forget();
         }
@@ -205,17 +211,19 @@ namespace Puffin.Editor.Hub.UI
                 _isDraggingLeft = false;
                 _isDraggingRight = false;
             }
-            else if (e.type == EventType.MouseDrag) 
+            else if (e.type == EventType.MouseDrag)
             {
                 if (_isDraggingLeft)
                 {
                     _leftPanelWidth = Mathf.Clamp(e.mousePosition.x, MinPanelWidth, MaxLeftPanelWidth);
+                    EditorPrefs.SetFloat(PrefKeyLeftPanelWidth, _leftPanelWidth);
                     Repaint();
                 }
                 else if (_isDraggingRight)
                 {
                     _rightPanelWidth = Mathf.Clamp(contentRect.xMax - e.mousePosition.x, MinPanelWidth,
                         MaxRightPanelWidth);
+                    EditorPrefs.SetFloat(PrefKeyRightPanelWidth, _rightPanelWidth);
                     Repaint();
                 }
             }
@@ -276,11 +284,7 @@ namespace Puffin.Editor.Hub.UI
                     PublishModuleWindow.Show();
 
                 if (GUILayout.Button("设置", EditorStyles.toolbarButton, GUILayout.Width(50)))
-                {
-                    Selection.activeObject = HubSettings.Instance;
-                    EditorGUIUtility.PingObject(HubSettings.Instance);
-                    EditorApplication.ExecuteMenuItem("Window/General/Inspector");
-                }
+                    Core.PuffinSettingsWindow.ShowAndSelect<HubSettings>();
             }
             EditorGUILayout.EndHorizontal();
         }
