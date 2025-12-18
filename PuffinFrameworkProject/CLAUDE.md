@@ -18,8 +18,8 @@ Assets/Puffin/
 │   │   ├── GameScriptEditor.cs
 │   │   ├── LogSettingsEditor.cs
 │   │   ├── PuffinFrameworkSettingsEditor.cs
+│   │   ├── PuffinSettingsWindow.cs   # 配置浏览窗口
 │   │   ├── SettingsInitializer.cs
-│   │   ├── SettingsMenuEditor.cs
 │   │   ├── SystemMonitorWindow.cs
 │   │   └── SystemRegistryWindow.cs
 │   ├── Environment/               # 环境依赖管理
@@ -135,6 +135,7 @@ Assets/Puffin/
     │   ├── LogSettings.cs
     │   ├── ModuleRegistrySettings.cs
     │   ├── PuffinFrameworkSettings.cs
+    │   ├── PuffinSettingAttribute.cs  # 配置窗口显示特性
     │   ├── SettingsBase.cs        # 配置基类
     │   └── SystemRegistrySettings.cs
     └── Tools/                     # 工具类
@@ -280,6 +281,7 @@ public class MyScript : GameScript
 | `[UpdateInterval(ms)]` | 更新间隔控制 |
 | `[ConditionalSystem]` | 条件系统 |
 | `[SystemAlias]` | 系统别名 |
+| `[PuffinSetting("名称")]` | 标记设置类在 Preference 窗口显示 |
 
 ## 配置文件
 
@@ -360,6 +362,16 @@ public class MySystem : IGameSystem, IUpdate, IRegisterEvent
 
 5. **事件解耦**: 模块间通信优先使用事件系统，避免直接依赖
 
+## 编辑器窗口
+
+| 菜单路径 | 窗口 | 说明 |
+|----------|------|------|
+| `Puffin/Preference` | PuffinSettingsWindow | 配置浏览窗口，显示所有带 `[PuffinSetting]` 特性的设置 |
+| `Puffin/Module Manager` | ModuleHubWindow | 模块管理中心 |
+| `Puffin/Environment Manager` | EnvironmentManagerWindow | 环境依赖管理 |
+| `Puffin/System Monitor` | SystemMonitorWindow | 系统监控 |
+| `Puffin/System Registry` | SystemRegistryWindow | 系统注册表 |
+
 ## 关键文件路径快速索引
 
 - 框架入口: `Assets/Puffin/Runtime/Core/PuffinFramework.cs`
@@ -367,5 +379,6 @@ public class MySystem : IGameSystem, IUpdate, IRegisterEvent
 - 事件分发器: `Assets/Puffin/Runtime/Events/Core/EventDispatcher.cs`
 - 启动器: `Assets/Puffin/Boot/Runtime/Launcher.cs`
 - 框架配置: `Assets/Puffin/Runtime/Settings/PuffinFrameworkSettings.cs`
+- 配置浏览窗口: `Assets/Puffin/Editor/Core/PuffinSettingsWindow.cs`
 - 模块管理: `Assets/Puffin/Editor/Hub/`
 - 工具类: `Assets/Puffin/Runtime/Tools/`
