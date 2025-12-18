@@ -5,7 +5,6 @@
         "PuffinFramework.Runtime",
         "LubanConfigModule.Runtime",
         "PuffinFramework.Editor",
-        "Test",
         "UniTask"
     ],
     "includePlatforms": [

@@ -46,13 +46,6 @@ namespace Puffin.Editor.Environment.Installers
                     return true;
             }
 
-            // 检查 dllReferences（DLL 文件）
-            if (dep.dllReferences != null && dep.dllReferences.Length > 0)
-            {
-                if (dep.dllReferences.All(dll => FindDll(dll)))
-                    return true;
-            }
-
             // 检查 requiredFiles（必需文件）
             if (dep.requiredFiles != null && dep.requiredFiles.Length > 0)
             {
@@ -168,9 +161,6 @@ namespace Puffin.Editor.Environment.Installers
 
             if (!string.IsNullOrEmpty(dep.asmdefName))
                 checks.Add($"程序集定义 '{dep.asmdefName}'");
-
-            if (dep.dllReferences != null && dep.dllReferences.Length > 0)
-                checks.Add($"DLL [{string.Join(", ", dep.dllReferences)}]");
 
             if (dep.requiredFiles != null && dep.requiredFiles.Length > 0)
                 checks.Add($"文件 [{string.Join(", ", dep.requiredFiles)}]");

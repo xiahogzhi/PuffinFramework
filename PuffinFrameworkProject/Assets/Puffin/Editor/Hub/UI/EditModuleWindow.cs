@@ -44,9 +44,7 @@ namespace Puffin.Editor.Hub.UI
                 _data.Dependencies = _data.Manifest.moduleDependencies ?? new List<ModuleDependency>();
                 _data.EnvDependencies = _data.Manifest.envDependencies != null ? new List<EnvironmentDependency>(_data.Manifest.envDependencies) : new();
                 // 加载引用配置
-                _data.ReferencesText = ModuleEditorHelper.CombineReferences(
-                    manifest.references?.asmdefReferences,
-                    manifest.references?.dllReferences);
+                _data.ReferencesText = manifest.GetReferences();
             }
             else
             {
@@ -178,13 +176,8 @@ namespace Puffin.Editor.Hub.UI
             _data.Manifest.envDependencies = _data.EnvDependencies.Count > 0 ? _data.EnvDependencies.ToArray() : null;
 
             // 保存引用配置
-            ModuleEditorHelper.ParseReferences(_data.ReferencesText, out var asmdefRefs, out var dllRefs);
-            var hasRefs = asmdefRefs.Count > 0 || dllRefs.Count > 0;
-            _data.Manifest.references = hasRefs ? new AsmdefReferenceConfig
-            {
-                asmdefReferences = asmdefRefs,
-                dllReferences = dllRefs
-            } : null;
+            var refsText = _data.ReferencesText?.Trim() ?? "";
+            _data.Manifest.references = !string.IsNullOrEmpty(refsText) ? new AsmdefReferenceConfig { references = refsText } : null;
 
             // 先保存 module.json
             var jsonPath = System.IO.Path.Combine(_modulePath, HubConstants.ManifestFileName);

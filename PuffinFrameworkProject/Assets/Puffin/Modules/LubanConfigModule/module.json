@@ -21,7 +21,10 @@
         "Luban/Luban.dll"
       ],
       "optional": false,
-      "targetFrameworks": []
+      "targetFrameworks": [],
+      "dllReferences": null,
+      "asmdefReferences": null,
+      "asmdefName": null
     },
     {
       "id": "LubanTemplate",
@@ -35,7 +38,10 @@
         "Datas/__tables__.xlsx"
       ],
       "optional": false,
-      "targetFrameworks": []
+      "targetFrameworks": [],
+      "dllReferences": null,
+      "asmdefReferences": null,
+      "asmdefName": null
     },
     {
       "id": "SimpleJSON",
@@ -49,16 +55,13 @@
         "SimpleJSON.cs"
       ],
       "optional": true,
-      "targetFrameworks": []
+      "targetFrameworks": [],
+      "dllReferences": null,
+      "asmdefReferences": null,
+      "asmdefName": null
     }
   ],
-  "references": {
-    "moduleReferences": [],
-    "asmdefReferences": [
-      "Test"
-    ],
-    "dllReferences": []
-  },
+  "references": null,
   "downloadUrl": "",
   "checksum": "",
   "size": 0,

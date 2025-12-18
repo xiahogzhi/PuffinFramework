@@ -636,8 +636,7 @@ namespace Puffin.Editor.Hub.Services
                 requiredFiles = envDep.requiredFiles,
                 targetFrameworks = envDep.targetFrameworks,
                 requirement = envDep.optional ? DependencyRequirement.Optional : DependencyRequirement.Required,
-                asmdefName = envDep.asmdefName,
-                dllReferences = envDep.dllReferences
+                asmdefName = envDep.asmdefName
             };
         }
 

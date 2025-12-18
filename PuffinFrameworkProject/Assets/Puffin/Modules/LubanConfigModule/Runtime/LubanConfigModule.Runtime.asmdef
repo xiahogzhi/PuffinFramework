@@ -3,7 +3,6 @@
     "rootNamespace": "",
     "references": [
         "PuffinFramework.Runtime",
-        "Test",
         "UniTask"
     ],
     "includePlatforms": [],

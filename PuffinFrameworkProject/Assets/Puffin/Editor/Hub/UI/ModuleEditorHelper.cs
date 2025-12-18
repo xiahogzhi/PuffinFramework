@@ -360,53 +360,8 @@ namespace Puffin.Editor.Hub.UI
         {
             EditorGUILayout.Space(10);
             EditorGUILayout.LabelField("程序集引用", EditorStyles.boldLabel);
-            EditorGUILayout.LabelField("  格式: asmdef 或 xxx.dll，#前缀为可选，分号分隔", EditorStyles.miniLabel);
+            EditorGUILayout.LabelField("  格式: xxx.asmdef 或 xxx.dll，#前缀为可选，分号分隔", EditorStyles.miniLabel);
             data.ReferencesText = EditorGUILayout.TextField("  ", data.ReferencesText);
         }
-
-        /// <summary>
-        /// 解析引用文本为 asmdef 和 dll 列表（保留#前缀表示可选）
-        /// </summary>
-        public static void ParseReferences(string text, out List<string> asmdefRefs, out List<string> dllRefs)
-        {
-            asmdefRefs = new List<string>();
-            dllRefs = new List<string>();
-            if (string.IsNullOrWhiteSpace(text)) return;
-
-            foreach (var item in text.Split(';'))
-            {
-                var trimmed = item.Trim();
-                if (string.IsNullOrEmpty(trimmed)) continue;
-                // 获取实际名称（去掉#前缀）
-                var name = trimmed.StartsWith("#") ? trimmed.Substring(1) : trimmed;
-                var prefix = trimmed.StartsWith("#") ? "#" : "";
-                if (name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
-                    dllRefs.Add(prefix + name);
-                else
-                    asmdefRefs.Add(prefix + name);
-            }
-        }
-
-        /// <summary>
-        /// 合并 asmdef 和 dll 列表为引用文本
-        /// </summary>
-        public static string CombineReferences(List<string> asmdefRefs, List<string> dllRefs)
-        {
-            var all = new List<string>();
-            if (asmdefRefs != null) all.AddRange(asmdefRefs);
-            if (dllRefs != null) all.AddRange(dllRefs);
-            return string.Join("; ", all);
-        }
-
-        /// <summary>
-        /// 判断引用是否为可选（#前缀）
-        /// </summary>
-        public static bool IsOptionalReference(string refName) => refName?.StartsWith("#") ?? false;
-
-        /// <summary>
-        /// 获取引用的实际名称（去掉#前缀）
-        /// </summary>
-        public static string GetReferenceName(string refName) =>
-            refName?.StartsWith("#") == true ? refName.Substring(1) : refName;
     }
 }

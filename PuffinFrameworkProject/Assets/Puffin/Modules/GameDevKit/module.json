@@ -1,35 +1,18 @@
 {
-    "moduleId": "GameDevKit",
-    "displayName": "游戏开发包",
-    "version": "1.0.0",
-    "author": "InputName",
-    "description": "包含一些通用的开发包脚本以及工具.",
-    "tags": [],
-    "unityVersion": "",
-    "puffinVersion": "",
-    "moduleDependencies": [],
-    "envDependencies": [
-        {
-            "id": "UniTask",
-            "source": 0,
-            "type": 3,
-            "url": "",
-            "version": "",
-            "installDir": "",
-            "extractPath": "",
-            "requiredFiles": [],
-            "optional": false,
-            "targetFrameworks": [],
-            "dllReferences": [],
-            "asmdefReferences": [
-                "UniTask"
-            ]
-        }
-    ],
-    "references": null,
-    "downloadUrl": "",
-    "checksum": "",
-    "size": 0,
-    "releaseNotes": "",
-    "publishedAt": ""
+  "moduleId": "GameDevKit",
+  "displayName": "游戏开发包",
+  "version": "1.0.0",
+  "author": "InputName",
+  "description": "包含一些通用的开发包脚本以及工具.",
+  "tags": [],
+  "unityVersion": "",
+  "puffinVersion": "",
+  "moduleDependencies": [],
+  "envDependencies": null,
+  "references": null,
+  "downloadUrl": "",
+  "checksum": "",
+  "size": 0,
+  "releaseNotes": "",
+  "publishedAt": ""
 }

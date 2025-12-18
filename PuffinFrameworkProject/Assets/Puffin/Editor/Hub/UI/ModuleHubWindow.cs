@@ -908,50 +908,29 @@ namespace Puffin.Editor.Hub.UI
                         }
 
                         // 显示程序集引用
-                        var refs = _selectedModule.Manifest?.references;
-                        var hasRefs = (refs?.asmdefReferences?.Count > 0) || (refs?.dllReferences?.Count > 0);
-                        if (hasRefs)
+                        var refsText = _selectedModule.Manifest?.GetReferences() ?? "";
+                        if (!string.IsNullOrWhiteSpace(refsText))
                         {
                             EditorGUILayout.Space(5);
                             EditorGUILayout.LabelField("程序集引用:", EditorStyles.boldLabel);
-                            if (refs.asmdefReferences != null)
+                            foreach (var item in refsText.Split(';'))
                             {
-                                foreach (var asmdef in refs.asmdefReferences)
+                                var trimmed = item.Trim();
+                                if (string.IsNullOrEmpty(trimmed)) continue;
+                                var isOptional = trimmed.StartsWith("#");
+                                var actualName = isOptional ? trimmed.Substring(1) : trimmed;
+                                var optText = isOptional ? " (可选)" : "";
+                                var isDll = actualName.EndsWith(".dll", System.StringComparison.OrdinalIgnoreCase);
+                                if (_selectedModule.IsInstalled)
                                 {
-                                    var isOptional = ModuleEditorHelper.IsOptionalReference(asmdef);
-                                    var actualName = ModuleEditorHelper.GetReferenceName(asmdef);
-                                    var optText = isOptional ? " (可选)" : "";
-                                    if (_selectedModule.IsInstalled)
-                                    {
-                                        var found = IsAsmdefAvailable(actualName);
-                                        var status = found ? "✓" : (isOptional ? "○" : "⚠");
-                                        var style = (found || isOptional) ? EditorStyles.miniLabel : new GUIStyle(EditorStyles.miniLabel) { normal = { textColor = Color.yellow } };
-                                        EditorGUILayout.LabelField($"  {status} {actualName}{optText}", style);
-                                    }
-                                    else
-                                    {
-                                        EditorGUILayout.LabelField($"  • {actualName}{optText}", EditorStyles.miniLabel);
-                                    }
+                                    var found = isDll ? IsDllAvailable(actualName) : IsAsmdefAvailable(actualName.Replace(".asmdef", ""));
+                                    var status = found ? "✓" : (isOptional ? "○" : "⚠");
+                                    var style = (found || isOptional) ? EditorStyles.miniLabel : new GUIStyle(EditorStyles.miniLabel) { normal = { textColor = Color.yellow } };
+                                    EditorGUILayout.LabelField($"  {status} {actualName}{optText}", style);
                                 }
-                            }
-                            if (refs.dllReferences != null)
-                            {
-                                foreach (var dll in refs.dllReferences)
+                                else
                                 {
-                                    var isOptional = ModuleEditorHelper.IsOptionalReference(dll);
-                                    var actualName = ModuleEditorHelper.GetReferenceName(dll);
-                                    var optText = isOptional ? " (可选)" : "";
-                                    if (_selectedModule.IsInstalled)
-                                    {
-                                        var found = IsDllAvailable(actualName);
-                                        var status = found ? "✓" : (isOptional ? "○" : "⚠");
-                                        var style = (found || isOptional) ? EditorStyles.miniLabel : new GUIStyle(EditorStyles.miniLabel) { normal = { textColor = Color.yellow } };
-                                        EditorGUILayout.LabelField($"  {status} {actualName}{optText}", style);
-                                    }
-                                    else
-                                    {
-                                        EditorGUILayout.LabelField($"  • {actualName}{optText}", EditorStyles.miniLabel);
-                                    }
+                                    EditorGUILayout.LabelField($"  • {actualName}{optText}", EditorStyles.miniLabel);
                                 }
                             }
                         }

@@ -341,39 +341,28 @@ namespace Puffin.Editor.Environment.UI
             }
             else if (installed)
             {
-                // ReferenceOnly 类型只显示标签，不显示卸载按钮
-                if (dep.type == DependencyType.ReferenceOnly)
+                // 检查是否有模块依赖此环境（仅必须依赖不可卸载）
+                var dependentModules = GetModulesRequiringEnv(dep.id);
+                var moduleExists = dependentModules.Any(m => Directory.Exists(Path.Combine(ModulesDir, m)));
+                var canUninstall = !isRequired || !moduleExists;
+
+                if (!canUninstall)
                 {
-                    GUI.backgroundColor = new Color(0.7f, 0.7f, 1f);
+                    GUI.backgroundColor = Color.gray;
                     GUI.enabled = false;
-                    GUILayout.Button("仅引用", GUILayout.Width(50));
+                    GUILayout.Button("必需", GUILayout.Width(40));
                     GUI.enabled = true;
                 }
                 else
                 {
-                    // 检查是否有模块依赖此环境（仅必须依赖不可卸载）
-                    var dependentModules = GetModulesRequiringEnv(dep.id);
-                    var moduleExists = dependentModules.Any(m => Directory.Exists(Path.Combine(ModulesDir, m)));
-                    var canUninstall = !isRequired || !moduleExists;
-
-                    if (!canUninstall)
+                    GUI.backgroundColor = new Color(1f, 0.5f, 0.5f);
+                    if (GUILayout.Button("卸载", GUILayout.Width(40)))
                     {
-                        GUI.backgroundColor = Color.gray;
-                        GUI.enabled = false;
-                        GUILayout.Button("必需", GUILayout.Width(40));
-                        GUI.enabled = true;
-                    }
-                    else
-                    {
-                        GUI.backgroundColor = new Color(1f, 0.5f, 0.5f);
-                        if (GUILayout.Button("卸载", GUILayout.Width(40)))
+                        if (EditorUtility.DisplayDialog("确认", $"确定要卸载 {dep.displayName ?? dep.id} 吗？", "确定", "取消"))
                         {
-                            if (EditorUtility.DisplayDialog("确认", $"确定要卸载 {dep.displayName ?? dep.id} 吗？", "确定", "取消"))
-                            {
-                                _manager.Uninstall(dep);
-                                AssetDatabase.Refresh();
-                                RefreshInstalledStatus();
-                            }
+                            _manager.Uninstall(dep);
+                            AssetDatabase.Refresh();
+                            RefreshInstalledStatus();
                         }
                     }
                 }

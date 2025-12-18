@@ -35,8 +35,10 @@ namespace Puffin.Editor.Hub.Data
     public class AsmdefReferenceConfig
     {
         public List<ModuleReference> moduleReferences = new();
-        public List<string> asmdefReferences = new();
-        public List<string> dllReferences = new();
+        /// <summary>
+        /// 引用列表，格式: xxx.asmdef 或 xxx.dll，#前缀为可选，分号分隔
+        /// </summary>
+        public string references = "";
     }
 
     /// <summary>
@@ -55,8 +57,6 @@ namespace Puffin.Editor.Hub.Data
         public string[] requiredFiles;
         public bool optional;  // 是否可选
         public string[] targetFrameworks;  // NuGet 目标框架
-        public string[] dllReferences;    // DLL 引用名称列表
-        public string[] asmdefReferences; // 程序集定义引用名称列表
         public string asmdefName;  // ManualImport: 要检查的程序集定义名称
     }
 
@@ -121,8 +121,33 @@ namespace Puffin.Editor.Hub.Data
             return result;
         }
 
-        public List<string> GetAsmdefReferences() => references?.asmdefReferences ?? new List<string>();
-        public List<string> GetDllReferences() => references?.dllReferences ?? new List<string>();
+        /// <summary>
+        /// 获取引用字符串
+        /// </summary>
+        public string GetReferences() => references?.references ?? "";
+
+        /// <summary>
+        /// 解析引用为 asmdef 和 dll 列表
+        /// </summary>
+        public void ParseReferences(out List<string> asmdefRefs, out List<string> dllRefs)
+        {
+            asmdefRefs = new List<string>();
+            dllRefs = new List<string>();
+            var text = GetReferences();
+            if (string.IsNullOrWhiteSpace(text)) return;
+
+            foreach (var item in text.Split(';'))
+            {
+                var trimmed = item.Trim();
+                if (string.IsNullOrEmpty(trimmed)) continue;
+                var name = trimmed.StartsWith("#") ? trimmed.Substring(1) : trimmed;
+                var prefix = trimmed.StartsWith("#") ? "#" : "";
+                if (name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                    dllRefs.Add(prefix + name);
+                else if (name.EndsWith(".asmdef", StringComparison.OrdinalIgnoreCase))
+                    asmdefRefs.Add(prefix + name.Substring(0, name.Length - 7));
+            }
+        }
     }
 
     /// <summary>
