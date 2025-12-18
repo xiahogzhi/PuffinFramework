@@ -22,8 +22,6 @@
       ],
       "optional": false,
       "targetFrameworks": [],
-      "dllReferences": null,
-      "asmdefReferences": null,
       "asmdefName": null
     },
     {
@@ -38,14 +36,12 @@
         "Datas/__tables__.xlsx"
       ],
       "optional": false,
-      "targetFrameworks": [],
-      "dllReferences": null,
-      "asmdefReferences": null,
+      "targetFrameworks": null,
       "asmdefName": null
     },
     {
       "id": "SimpleJSON",
-      "source": 4,
+      "source": 1,
       "type": 0,
       "url": "Bunny83/SimpleJSON@master",
       "version": "",
@@ -55,13 +51,14 @@
         "SimpleJSON.cs"
       ],
       "optional": true,
-      "targetFrameworks": [],
-      "dllReferences": null,
-      "asmdefReferences": null,
+      "targetFrameworks": null,
       "asmdefName": null
     }
   ],
-  "references": null,
+  "references": {
+    "moduleReferences": [],
+    "references": "UniTask.asmdef"
+  },
   "downloadUrl": "",
   "checksum": "",
   "size": 0,

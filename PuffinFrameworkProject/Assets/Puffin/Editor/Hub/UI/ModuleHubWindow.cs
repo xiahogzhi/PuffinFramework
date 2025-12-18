@@ -917,10 +917,14 @@ namespace Puffin.Editor.Hub.UI
                         {
                             EditorGUILayout.Space(5);
                             EditorGUILayout.LabelField("程序集引用:", EditorStyles.boldLabel);
-                            foreach (var item in refsText.Split(';'))
+                            // 排序：必须的在前，可选的在后
+                            var refs = refsText.Split(';')
+                                .Select(r => r.Trim())
+                                .Where(r => !string.IsNullOrEmpty(r))
+                                .OrderBy(r => r.StartsWith("#") ? 1 : 0)
+                                .ToList();
+                            foreach (var trimmed in refs)
                             {
-                                var trimmed = item.Trim();
-                                if (string.IsNullOrEmpty(trimmed)) continue;
                                 var isOptional = trimmed.StartsWith("#");
                                 var actualName = isOptional ? trimmed.Substring(1) : trimmed;
                                 var optText = isOptional ? " (可选)" : "";

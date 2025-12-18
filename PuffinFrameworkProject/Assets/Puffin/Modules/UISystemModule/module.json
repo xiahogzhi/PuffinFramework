@@ -1,74 +1,28 @@
 {
-    "moduleId": "UISystemModule",
-    "displayName": "UI系统",
-    "version": "1.0.0",
-    "author": "InputName",
-    "description": "UI系统模块，支持层级管理，自动设置Mask，动画播放，Pop类型UI，主类型UI，附加UI",
-    "tags": [],
-    "unityVersion": "",
-    "puffinVersion": "",
-    "moduleDependencies": [
-        {
-            "moduleId": "GameDevKit",
-            "version": "",
-            "registryId": "official",
-            "optional": false
-        }
-    ],
-    "envDependencies": [
-        {
-            "id": "UniTask",
-            "source": 0,
-            "type": 3,
-            "url": "",
-            "version": "",
-            "installDir": "",
-            "extractPath": "",
-            "requiredFiles": [],
-            "optional": false,
-            "targetFrameworks": [],
-            "dllReferences": [],
-            "asmdefReferences": [
-                "UniTask"
-            ]
-        },
-        {
-            "id": "DOTween",
-            "source": 0,
-            "type": 3,
-            "url": "",
-            "version": "",
-            "installDir": "",
-            "extractPath": "",
-            "requiredFiles": [],
-            "optional": true,
-            "targetFrameworks": [],
-            "dllReferences": [
-                "DOTween.dll"
-            ],
-            "asmdefReferences": []
-        },
-        {
-            "id": "Sirenix.OdinInspector.Attributes",
-            "source": 0,
-            "type": 3,
-            "url": "",
-            "version": "",
-            "installDir": "",
-            "extractPath": "",
-            "requiredFiles": [],
-            "optional": true,
-            "targetFrameworks": [],
-            "dllReferences": [
-                "Sirenix.OdinInspector.Attributes.dll"
-            ],
-            "asmdefReferences": []
-        }
-    ],
-    "references": null,
-    "downloadUrl": "",
-    "checksum": "",
-    "size": 0,
-    "releaseNotes": "",
-    "publishedAt": ""
+  "moduleId": "UISystemModule",
+  "displayName": "UI系统",
+  "version": "1.0.0",
+  "author": "InputName",
+  "description": "UI系统模块，支持层级管理，自动设置Mask，动画播放，Pop类型UI，主类型UI，附加UI",
+  "tags": [],
+  "unityVersion": "",
+  "puffinVersion": "",
+  "moduleDependencies": [
+    {
+      "moduleId": "GameDevKit",
+      "version": "",
+      "registryId": "official",
+      "optional": false
+    }
+  ],
+  "envDependencies": null,
+  "references": {
+    "moduleReferences": [],
+    "references": "#Sirenix.OdinInspector.Attributes.dll;#DOTween.dll;UniTask.asmdef;UnityEngine.UI.asmdef"
+  },
+  "downloadUrl": "",
+  "checksum": "",
+  "size": 0,
+  "releaseNotes": "",
+  "publishedAt": ""
 }

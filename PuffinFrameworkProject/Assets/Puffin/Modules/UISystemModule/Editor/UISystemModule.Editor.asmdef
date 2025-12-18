@@ -7,7 +7,8 @@
         "PuffinFramework.Editor",
         "GameDevKit.Runtime",
         "GameDevKit.Editor",
-        "UniTask"
+        "UniTask",
+        "UnityEngine.UI"
     ],
     "includePlatforms": [
         "Editor"
