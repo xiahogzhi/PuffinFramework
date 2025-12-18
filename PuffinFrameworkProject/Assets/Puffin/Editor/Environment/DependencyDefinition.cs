@@ -3,7 +3,7 @@ using System;
 
 namespace Puffin.Editor.Environment
 {
-    public enum DependencySource { NuGet, GitHubRepo, DirectUrl, GitHubRelease, UnityPackage }
+    public enum DependencySource { NuGet, GitHubRepo, DirectUrl, GitHubRelease, UnityPackage, ManualImport }
     public enum DependencyType { DLL, Source, Tool, ReferenceOnly }
     public enum DependencyRequirement { Required, Optional }
 

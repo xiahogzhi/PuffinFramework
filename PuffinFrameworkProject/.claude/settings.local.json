@@ -4,7 +4,10 @@
       "Bash(unzip:*)",
       "Bash(dir:*)",
       "WebFetch(domain:docs.unity3d.com)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(git pull:*)",
+      "Bash(ssh-add:*)",
+      "Bash(git add:*)"
     ]
   }
 }

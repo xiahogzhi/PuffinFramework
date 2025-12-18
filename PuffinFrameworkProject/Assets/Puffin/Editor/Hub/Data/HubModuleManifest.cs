@@ -46,15 +46,18 @@ namespace Puffin.Editor.Hub.Data
     public class EnvironmentDependency
     {
         public string id;
-        public int source;
-        public int type;
+        public int source;  // DependencySource
+        public int type;    // DependencyType
         public string url;
         public string version;
         public string installDir;
-        public string extractPath;
+        public string extractPath;  // 从压缩包中提取的子路径
         public string[] requiredFiles;
-        public bool optional;
-        public string[] targetFrameworks;
+        public bool optional;  // 是否可选
+        public string[] targetFrameworks;  // NuGet 目标框架
+        public string[] dllReferences;    // DLL 引用名称列表
+        public string[] asmdefReferences; // 程序集定义引用名称列表
+        public string asmdefName;  // ManualImport: 要检查的程序集定义名称
     }
 
     /// <summary>
@@ -122,6 +125,9 @@ namespace Puffin.Editor.Hub.Data
         public List<string> GetDllReferences() => references?.dllReferences ?? new List<string>();
     }
 
+    /// <summary>
+    /// 仓库索引
+    /// </summary>
     [Serializable]
     public class RegistryIndex
     {

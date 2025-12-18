@@ -19,9 +19,11 @@ namespace Puffin.Editor.Hub.UI
         // 临时编辑字段
         private string _requiredFilesStr;
         private string _targetFrameworksStr;
+        private string _dllReferencesStr;
+        private string _asmdefReferencesStr;
 
-        private static readonly string[] SourceNames = { "NuGet", "GitHub Repo", "Direct URL", "GitHub Release", "Unity Package" };
-        private static readonly string[] TypeNames = { "DLL", "Source", "Tool" };
+        private static readonly string[] SourceNames = { "NuGet", "GitHub Repo", "Direct URL", "GitHub Release", "Unity Package", "手动导入" };
+        private static readonly string[] TypeNames = { "DLL", "Source", "Tool", "ReferenceOnly" };
 
         public static void ShowNew(Action<EnvironmentDependency> onSaved)
         {
@@ -49,6 +51,8 @@ namespace Puffin.Editor.Hub.UI
         {
             _requiredFilesStr = _dependency.requiredFiles != null ? string.Join(", ", _dependency.requiredFiles) : "";
             _targetFrameworksStr = _dependency.targetFrameworks != null ? string.Join(", ", _dependency.targetFrameworks) : "";
+            _dllReferencesStr = _dependency.dllReferences != null ? string.Join(", ", _dependency.dllReferences) : "";
+            _asmdefReferencesStr = _dependency.asmdefReferences != null ? string.Join(", ", _dependency.asmdefReferences) : "";
         }
 
         private void OnGUI()
@@ -64,40 +68,73 @@ namespace Puffin.Editor.Hub.UI
             EditorGUILayout.LabelField("基本信息", EditorStyles.boldLabel);
             _dependency.id = EditorGUILayout.TextField("ID *", _dependency.id);
             _dependency.type = EditorGUILayout.Popup("类型", _dependency.type, TypeNames);
-            _dependency.source = EditorGUILayout.Popup("来源", _dependency.source, SourceNames);
-            _dependency.version = EditorGUILayout.TextField("版本", _dependency.version);
 
-            EditorGUILayout.Space(10);
-
-            // 来源配置
-            EditorGUILayout.LabelField("来源配置", EditorStyles.boldLabel);
-            switch (_dependency.source)
+            var isReferenceOnly = _dependency.type == 3;
+            if (isReferenceOnly)
             {
-                case 0: // NuGet
-                    EditorGUILayout.HelpBox("NuGet 包会自动从 nuget.org 下载", MessageType.Info);
-                    _targetFrameworksStr = EditorGUILayout.TextField("目标框架 (逗号分隔)", _targetFrameworksStr);
-                    break;
-                case 1: // GitHub Repo
-                    _dependency.url = EditorGUILayout.TextField("仓库 URL", _dependency.url);
-                    _dependency.extractPath = EditorGUILayout.TextField("提取路径", _dependency.extractPath);
-                    break;
-                case 2: // Direct URL
-                    _dependency.url = EditorGUILayout.TextField("下载 URL", _dependency.url);
-                    _dependency.extractPath = EditorGUILayout.TextField("提取路径", _dependency.extractPath);
-                    break;
-                case 3: // GitHub Release
-                    _dependency.url = EditorGUILayout.TextField("仓库 URL", _dependency.url);
-                    EditorGUILayout.HelpBox("将从 GitHub Release 下载指定版本", MessageType.Info);
-                    break;
+                EditorGUILayout.HelpBox("仅引用类型：不需要下载安装，只添加程序集引用", MessageType.Info);
+            }
+            else
+            {
+                _dependency.source = EditorGUILayout.Popup("来源", _dependency.source, SourceNames);
+                _dependency.version = EditorGUILayout.TextField("版本", _dependency.version);
+
+                EditorGUILayout.Space(10);
+
+                // 来源配置
+                EditorGUILayout.LabelField("来源配置", EditorStyles.boldLabel);
+                switch (_dependency.source)
+                {
+                    case 0: // NuGet
+                        EditorGUILayout.HelpBox("NuGet 包会自动从 nuget.org 下载", MessageType.Info);
+                        _targetFrameworksStr = EditorGUILayout.TextField("目标框架 (逗号分隔)", _targetFrameworksStr);
+                        break;
+                    case 1: // GitHub Repo
+                        _dependency.url = EditorGUILayout.TextField("仓库 URL", _dependency.url);
+                        _dependency.extractPath = EditorGUILayout.TextField("提取路径", _dependency.extractPath);
+                        break;
+                    case 2: // Direct URL
+                        _dependency.url = EditorGUILayout.TextField("下载 URL", _dependency.url);
+                        _dependency.extractPath = EditorGUILayout.TextField("提取路径", _dependency.extractPath);
+                        break;
+                    case 3: // GitHub Release
+                        _dependency.url = EditorGUILayout.TextField("仓库 URL", _dependency.url);
+                        EditorGUILayout.HelpBox("将从 GitHub Release 下载指定版本", MessageType.Info);
+                        break;
+                    case 4: // Unity Package
+                        _dependency.url = EditorGUILayout.TextField("Git URL (可选)", _dependency.url);
+                        EditorGUILayout.HelpBox("通过 Unity Package Manager 安装，支持版本号或 Git URL", MessageType.Info);
+                        break;
+                    case 5: // ManualImport
+                        _dependency.asmdefName = EditorGUILayout.TextField("程序集定义名称", _dependency.asmdefName);
+                        EditorGUILayout.LabelField("DLL 名称 (逗号分隔):");
+                        _dllReferencesStr = EditorGUILayout.TextField(_dllReferencesStr);
+                        EditorGUILayout.LabelField("必需文件 (逗号分隔):");
+                        _requiredFilesStr = EditorGUILayout.TextField(_requiredFilesStr);
+                        EditorGUILayout.HelpBox("手动导入：检查用户是否已导入所需插件（如 Odin, DOTween）\n支持检查程序集定义(.asmdef)、DLL文件或指定路径\n未导入时将阻止模块安装", MessageType.Info);
+                        break;
+                }
+
+                var isManualImport = _dependency.source == 5;
+
+                // 安装配置（ManualImport 不需要）
+                if (!isManualImport)
+                {
+                    EditorGUILayout.Space(10);
+                    EditorGUILayout.LabelField("安装配置", EditorStyles.boldLabel);
+                    _dependency.installDir = EditorGUILayout.TextField("安装目录", _dependency.installDir);
+                    EditorGUILayout.LabelField("必需文件 (逗号分隔):");
+                    _requiredFilesStr = EditorGUILayout.TextField(_requiredFilesStr);
+                }
             }
 
+            // 引用配置
             EditorGUILayout.Space(10);
-
-            // 安装配置
-            EditorGUILayout.LabelField("安装配置", EditorStyles.boldLabel);
-            _dependency.installDir = EditorGUILayout.TextField("安装目录", _dependency.installDir);
-            EditorGUILayout.LabelField("必需文件 (逗号分隔):");
-            _requiredFilesStr = EditorGUILayout.TextField(_requiredFilesStr);
+            EditorGUILayout.LabelField("引用配置", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("DLL 引用 (逗号分隔):");
+            _dllReferencesStr = EditorGUILayout.TextField(_dllReferencesStr);
+            EditorGUILayout.LabelField("程序集定义引用 (逗号分隔):");
+            _asmdefReferencesStr = EditorGUILayout.TextField(_asmdefReferencesStr);
 
             EditorGUILayout.Space(10);
 
@@ -132,6 +169,8 @@ namespace Puffin.Editor.Hub.UI
             // 解析数组字段
             _dependency.requiredFiles = ParseArray(_requiredFilesStr);
             _dependency.targetFrameworks = ParseArray(_targetFrameworksStr);
+            _dependency.dllReferences = ParseArray(_dllReferencesStr);
+            _dependency.asmdefReferences = ParseArray(_asmdefReferencesStr);
 
             _onSaved?.Invoke(_dependency);
             Close();

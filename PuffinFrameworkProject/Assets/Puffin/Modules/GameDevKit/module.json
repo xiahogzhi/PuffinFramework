@@ -8,7 +8,24 @@
     "unityVersion": "",
     "puffinVersion": "",
     "moduleDependencies": [],
-    "envDependencies": [],
+    "envDependencies": [
+        {
+            "id": "UniTask",
+            "source": 0,
+            "type": 3,
+            "url": "",
+            "version": "",
+            "installDir": "",
+            "extractPath": "",
+            "requiredFiles": [],
+            "optional": false,
+            "targetFrameworks": [],
+            "dllReferences": [],
+            "asmdefReferences": [
+                "UniTask"
+            ]
+        }
+    ],
     "references": null,
     "downloadUrl": "",
     "checksum": "",

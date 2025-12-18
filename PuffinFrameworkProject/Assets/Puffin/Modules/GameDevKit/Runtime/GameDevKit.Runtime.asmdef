@@ -2,7 +2,8 @@
     "name": "GameDevKit.Runtime",
     "rootNamespace": "",
     "references": [
-        "PuffinFramework.Runtime"
+        "PuffinFramework.Runtime",
+        "UniTask"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

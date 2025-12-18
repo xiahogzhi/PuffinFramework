@@ -99,6 +99,8 @@ namespace Puffin.Editor.Hub.Services
 
         public static void ResolveAll()
         {
+            CleanupMissingReferences();
+
             var modulesDir = ManifestService.GetModulesPath();
             if (!Directory.Exists(modulesDir)) return;
 
@@ -118,6 +120,7 @@ namespace Puffin.Editor.Hub.Services
                 }
             }
 
+            ResolveAllEnvDependencies();
             AssetDatabase.Refresh();
         }
 
@@ -181,6 +184,301 @@ namespace Puffin.Editor.Hub.Services
             }
 
             File.WriteAllText(asmdefPath, JsonUtility.ToJson(data, true));
+        }
+
+        /// <summary>
+        /// 解析所有模块的环境依赖引用
+        /// </summary>
+        public static void ResolveAllEnvDependencies()
+        {
+            var modulesDir = Path.Combine(Application.dataPath, "Puffin/Modules");
+            if (!Directory.Exists(modulesDir)) return;
+
+            var depManager = new Environment.DependencyManager();
+            var changed = false;
+
+            foreach (var moduleDir in Directory.GetDirectories(modulesDir))
+            {
+                var moduleId = Path.GetFileName(moduleDir);
+                var manifestPath = Path.Combine(moduleDir, "module.json");
+                if (!File.Exists(manifestPath)) continue;
+
+                try
+                {
+                    var json = File.ReadAllText(manifestPath);
+                    var manifest = JsonUtility.FromJson<HubModuleManifest>(json);
+                    if (manifest?.envDependencies == null) continue;
+
+                    var runtimeDir = Path.Combine(moduleDir, "Runtime");
+                    var editorDir = Path.Combine(moduleDir, "Editor");
+                    var runtimeAsmdef = Directory.Exists(runtimeDir)
+                        ? Directory.GetFiles(runtimeDir, "*.asmdef", SearchOption.TopDirectoryOnly).FirstOrDefault()
+                        : null;
+                    var editorAsmdef = Directory.Exists(editorDir)
+                        ? Directory.GetFiles(editorDir, "*.asmdef", SearchOption.TopDirectoryOnly).FirstOrDefault()
+                        : null;
+
+                    foreach (var envDep in manifest.envDependencies)
+                    {
+                        var dep = ConvertToDepDefinition(envDep);
+                        var isInstalled = depManager.IsInstalled(dep);
+
+                        if (isInstalled)
+                        {
+                            if (envDep.dllReferences is {Length: > 0})
+                            {
+                                if (File.Exists(runtimeAsmdef) && AddDllReferences(runtimeAsmdef, envDep.dllReferences))
+                                    changed = true;
+                                if (File.Exists(editorAsmdef) && AddDllReferences(editorAsmdef, envDep.dllReferences))
+                                    changed = true;
+                            }
+                            if (envDep.asmdefReferences is {Length: > 0})
+                            {
+                                foreach (var asmRef in envDep.asmdefReferences)
+                                {
+                                    if (File.Exists(runtimeAsmdef) && AddReferenceIfMissing(runtimeAsmdef, asmRef))
+                                        changed = true;
+                                    if (File.Exists(editorAsmdef) && AddReferenceIfMissing(editorAsmdef, asmRef))
+                                        changed = true;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            if (envDep.dllReferences is {Length: > 0})
+                            {
+                                if (File.Exists(runtimeAsmdef) && RemoveDllReferences(runtimeAsmdef, envDep.dllReferences))
+                                    changed = true;
+                                if (File.Exists(editorAsmdef) && RemoveDllReferences(editorAsmdef, envDep.dllReferences))
+                                    changed = true;
+                            }
+                            if (envDep.asmdefReferences is {Length: > 0})
+                            {
+                                foreach (var asmRef in envDep.asmdefReferences)
+                                {
+                                    if (File.Exists(runtimeAsmdef) && RemoveReferenceIfExists(runtimeAsmdef, asmRef))
+                                        changed = true;
+                                    if (File.Exists(editorAsmdef) && RemoveReferenceIfExists(editorAsmdef, asmRef))
+                                        changed = true;
+                                }
+                            }
+                        }
+                    }
+                }
+                catch (Exception e)
+                {
+                    Debug.LogWarning($"[AsmdefResolver] 处理模块 {moduleId} 环境依赖失败: {e.Message}");
+                }
+            }
+
+            if (changed)
+                AssetDatabase.Refresh();
+        }
+
+        private static Environment.DependencyDefinition ConvertToDepDefinition(EnvironmentDependency envDep)
+        {
+            return new Environment.DependencyDefinition
+            {
+                id = envDep.id,
+                source = (Environment.DependencySource)envDep.source,
+                type = (Environment.DependencyType)envDep.type,
+                url = envDep.url,
+                version = envDep.version,
+                installDir = envDep.installDir,
+                requiredFiles = envDep.requiredFiles,
+                targetFrameworks = envDep.targetFrameworks
+            };
+        }
+
+        private static bool AddReferenceIfMissing(string asmdefPath, string referenceName)
+        {
+            if (!File.Exists(asmdefPath)) return false;
+            if (!AsmdefExists(referenceName)) return false;
+            var json = File.ReadAllText(asmdefPath);
+            var data = JsonUtility.FromJson<AsmdefData>(json);
+            if (data.references.Contains(referenceName)) return false;
+            data.references.Add(referenceName);
+            File.WriteAllText(asmdefPath, JsonUtility.ToJson(data, true));
+            return true;
+        }
+
+        private static bool RemoveReferenceIfExists(string asmdefPath, string referenceName)
+        {
+            if (!File.Exists(asmdefPath)) return false;
+            var json = File.ReadAllText(asmdefPath);
+            var data = JsonUtility.FromJson<AsmdefData>(json);
+            if (!data.references.Remove(referenceName)) return false;
+            File.WriteAllText(asmdefPath, JsonUtility.ToJson(data, true));
+            return true;
+        }
+
+        private static bool AddDllReferences(string asmdefPath, string[] dllNames)
+        {
+            if (!File.Exists(asmdefPath)) return false;
+
+            var json = File.ReadAllText(asmdefPath);
+            var data = JsonUtility.FromJson<AsmdefData>(json);
+            var changed = false;
+
+            foreach (var dll in dllNames)
+            {
+                if (!data.precompiledReferences.Contains(dll) && DllExists(dll))
+                {
+                    data.precompiledReferences.Add(dll);
+                    changed = true;
+                }
+            }
+
+            if (changed)
+            {
+                data.overrideReferences = true;
+                File.WriteAllText(asmdefPath, JsonUtility.ToJson(data, true));
+            }
+            return changed;
+        }
+
+        private static bool RemoveDllReferences(string asmdefPath, string[] dllNames)
+        {
+            if (!File.Exists(asmdefPath)) return false;
+
+            var json = File.ReadAllText(asmdefPath);
+            var data = JsonUtility.FromJson<AsmdefData>(json);
+            var changed = false;
+
+            foreach (var dll in dllNames)
+            {
+                if (data.precompiledReferences.Remove(dll))
+                    changed = true;
+            }
+
+            if (changed)
+            {
+                if (data.precompiledReferences.Count == 0)
+                    data.overrideReferences = false;
+                File.WriteAllText(asmdefPath, JsonUtility.ToJson(data, true));
+            }
+            return changed;
+        }
+
+        /// <summary>
+        /// 清理所有模块中丢失的程序集和 DLL 引用
+        /// </summary>
+        public static void CleanupMissingReferences()
+        {
+            var modulesDir = Path.Combine(Application.dataPath, "Puffin/Modules");
+            if (!Directory.Exists(modulesDir)) return;
+
+            var changed = false;
+            foreach (var moduleDir in Directory.GetDirectories(modulesDir))
+            {
+                var runtimeDir = Path.Combine(moduleDir, "Runtime");
+                var editorDir = Path.Combine(moduleDir, "Editor");
+
+                var runtimeAsmdef = Directory.Exists(runtimeDir)
+                    ? Directory.GetFiles(runtimeDir, "*.asmdef", SearchOption.TopDirectoryOnly).FirstOrDefault()
+                    : null;
+                var editorAsmdef = Directory.Exists(editorDir)
+                    ? Directory.GetFiles(editorDir, "*.asmdef", SearchOption.TopDirectoryOnly).FirstOrDefault()
+                    : null;
+
+                if (!string.IsNullOrEmpty(runtimeAsmdef) && CleanupAsmdefReferences(runtimeAsmdef))
+                    changed = true;
+                if (!string.IsNullOrEmpty(editorAsmdef) && CleanupAsmdefReferences(editorAsmdef))
+                    changed = true;
+            }
+
+            if (changed)
+            {
+                AssetDatabase.Refresh();
+                Debug.Log("[AsmdefResolver] 已清理丢失的引用");
+            }
+        }
+
+        private static bool CleanupAsmdefReferences(string asmdefPath)
+        {
+            if (!File.Exists(asmdefPath)) return false;
+
+            var json = File.ReadAllText(asmdefPath);
+            var data = JsonUtility.FromJson<AsmdefData>(json);
+            var changed = false;
+
+            var validRefs = new List<string>();
+            foreach (var refName in data.references)
+            {
+                if (refName.StartsWith("GUID:") || AsmdefExists(refName))
+                    validRefs.Add(refName);
+                else
+                    changed = true;
+            }
+            data.references = validRefs;
+
+            if (data.precompiledReferences.Count > 0)
+            {
+                var validDlls = new List<string>();
+                foreach (var dllName in data.precompiledReferences)
+                {
+                    if (DllExists(dllName))
+                        validDlls.Add(dllName);
+                    else
+                        changed = true;
+                }
+                data.precompiledReferences = validDlls;
+
+                if (data.precompiledReferences.Count == 0)
+                    data.overrideReferences = false;
+            }
+
+            if (changed)
+                File.WriteAllText(asmdefPath, JsonUtility.ToJson(data, true));
+
+            return changed;
+        }
+
+        private static bool AsmdefExists(string asmdefName)
+        {
+            var searchPaths = new[]
+            {
+                Application.dataPath,
+                Path.Combine(Application.dataPath, "../Packages"),
+                Path.Combine(Application.dataPath, "../Library/PackageCache")
+            };
+
+            foreach (var basePath in searchPaths)
+            {
+                if (!Directory.Exists(basePath)) continue;
+                try
+                {
+                    var files = Directory.GetFiles(basePath, $"{asmdefName}.asmdef", SearchOption.AllDirectories);
+                    if (files.Any(f => !f.Contains("~"))) return true;
+                }
+                catch { }
+            }
+            return false;
+        }
+
+        private static bool DllExists(string dllName)
+        {
+            if (!dllName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                dllName += ".dll";
+
+            var searchPaths = new[]
+            {
+                Application.dataPath,
+                Path.Combine(Application.dataPath, "../Packages"),
+                Path.Combine(Application.dataPath, "../Library/PackageCache")
+            };
+
+            foreach (var basePath in searchPaths)
+            {
+                if (!Directory.Exists(basePath)) continue;
+                try
+                {
+                    var files = Directory.GetFiles(basePath, dllName, SearchOption.AllDirectories);
+                    if (files.Any(f => !f.Contains("~"))) return true;
+                }
+                catch { }
+            }
+            return false;
         }
     }
 }
