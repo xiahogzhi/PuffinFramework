@@ -1,10 +1,8 @@
 #if UNITY_EDITOR
-using System;
 using System.Collections.Generic;
 using System.IO;
-using Puffin.Editor.Hub.Data;
+using Puffin.Editor.Hub;
 using UnityEditor;
-using UnityEngine;
 
 namespace Puffin.Editor.Hub.Services
 {
@@ -16,7 +14,6 @@ namespace Puffin.Editor.Hub.Services
     public static class ModuleDependencyResolver
     {
         private static FileSystemWatcher _watcher;
-        private static bool _isProcessing;
         private static readonly HashSet<string> _pendingModules = new();
 
         static ModuleDependencyResolver()
@@ -27,20 +24,18 @@ namespace Puffin.Editor.Hub.Services
         private static void OnEditorReady()
         {
             EditorApplication.delayCall -= OnEditorReady;
-
-            // 设置文件监听
             SetupFileWatcher();
         }
 
         private static void SetupFileWatcher()
         {
-            var modulesDir = Path.Combine(Application.dataPath, "Puffin/Modules");
+            var modulesDir = ManifestService.GetModulesPath();
             if (!Directory.Exists(modulesDir))
                 Directory.CreateDirectory(modulesDir);
 
             _watcher = new FileSystemWatcher(modulesDir)
             {
-                Filter = "module.json",
+                Filter = HubConstants.ManifestFileName,
                 IncludeSubdirectories = true,
                 NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.CreationTime
             };
@@ -60,7 +55,6 @@ namespace Puffin.Editor.Hub.Services
                 _pendingModules.Add(moduleId);
             }
 
-            // 延迟处理，避免频繁触发
             EditorApplication.delayCall -= ProcessPendingModules;
             EditorApplication.delayCall += ProcessPendingModules;
         }
@@ -77,8 +71,7 @@ namespace Puffin.Editor.Hub.Services
                 _pendingModules.Clear();
             }
 
-            // 更新程序集引用
-            AsmdefDependencyResolver.ResolveAllModuleDependencies();
+            AsmdefDependencyResolver.ResolveAll();
         }
     }
 }

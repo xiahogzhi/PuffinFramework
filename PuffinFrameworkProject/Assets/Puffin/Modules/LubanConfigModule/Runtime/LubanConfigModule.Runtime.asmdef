@@ -1,0 +1,17 @@
+{
+    "name": "LubanConfigModule.Runtime",
+    "rootNamespace": "",
+    "references": [
+        "PuffinFramework.Runtime",
+        "Test",
+        "UniTask"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "noEngineReferences": false
+}

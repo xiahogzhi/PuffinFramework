@@ -5,9 +5,11 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using Cysharp.Threading.Tasks;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Puffin.Editor.Environment;
 using Puffin.Editor.Environment.Core;
+using Puffin.Editor.Hub;
 using Puffin.Editor.Hub.Data;
 using UnityEditor;
 using UnityEngine;
@@ -174,7 +176,7 @@ namespace Puffin.Editor.Hub.Services
                     var module = resolveResult.Modules[i];
                     OnProgress?.Invoke(module.ModuleId, (float)i / total);
 
-                    var modulePath = Path.Combine(Application.dataPath, $"Puffin/Modules/{module.ModuleId}");
+                    var modulePath = ManifestService.GetModulePath(module.ModuleId);
                     if (InstalledModulesLock.Instance.IsInstalled(module.ModuleId) && Directory.Exists(modulePath))
                         continue;
 
@@ -233,7 +235,7 @@ namespace Puffin.Editor.Hub.Services
                     OnProgress?.Invoke(module.ModuleId, (float) i / total);
 
                     // 检查是否真正已安装（锁定文件 + 目录存在）
-                    var modulePath = Path.Combine(Application.dataPath, $"Puffin/Modules/{module.ModuleId}");
+                    var modulePath = ManifestService.GetModulePath(module.ModuleId);
                     var isReallyInstalled = InstalledModulesLock.Instance.IsInstalled(module.ModuleId) &&
                                             Directory.Exists(modulePath);
 
@@ -277,7 +279,7 @@ namespace Puffin.Editor.Hub.Services
         {
             try
             {
-                var modulePath = Path.Combine(Application.dataPath, $"Puffin/Modules/{moduleId}");
+                var modulePath = ManifestService.GetModulePath(moduleId);
                 var moduleLock = InstalledModulesLock.Instance.GetModule(moduleId);
 
                 // 检查模块是否存在
@@ -448,7 +450,7 @@ namespace Puffin.Editor.Hub.Services
                 return false;
             }
 
-            var destPath = Path.Combine(Application.dataPath, $"Puffin/Modules/{module.ModuleId}");
+            var destPath = ManifestService.GetModulePath(module.ModuleId);
             if (Directory.Exists(destPath))
                 Directory.Delete(destPath, true);
 
@@ -466,17 +468,16 @@ namespace Puffin.Editor.Hub.Services
                 resolvedDependencies = new List<string>()
             };
 
-            if (manifest.dependencies != null)
-                foreach (var dep in manifest.dependencies)
-                    lockEntry.resolvedDependencies.Add(dep);
+            if (manifest.moduleDependencies != null)
+                foreach (var dep in manifest.moduleDependencies)
+                    lockEntry.resolvedDependencies.Add(dep.moduleId);
 
             InstalledModulesLock.Instance.AddOrUpdate(lockEntry);
 
             // 4. 更新程序集引用
             try
             {
-                var deps = manifest.GetAllDependencies();
-                AsmdefDependencyResolver.UpdateModuleAsmdefReferences(module.ModuleId, destPath, deps);
+                AsmdefDependencyResolver.UpdateReferences(module.ModuleId, destPath, manifest);
             }
             catch (Exception e)
             {
@@ -583,7 +584,7 @@ namespace Puffin.Editor.Hub.Services
             }
 
             // 4. 解压到模块目录
-            var destPath = Path.Combine(Application.dataPath, $"Puffin/Modules/{module.ModuleId}");
+            var destPath = ManifestService.GetModulePath(module.ModuleId);
             if (Directory.Exists(destPath))
                 Directory.Delete(destPath, true);
 
@@ -601,19 +602,16 @@ namespace Puffin.Editor.Hub.Services
                 resolvedDependencies = new List<string>()
             };
 
-            if (manifest.dependencies != null)
-            {
-                foreach (var dep in manifest.dependencies)
-                    lockEntry.resolvedDependencies.Add(dep);
-            }
+            if (manifest.moduleDependencies != null)
+                foreach (var dep in manifest.moduleDependencies)
+                    lockEntry.resolvedDependencies.Add(dep.moduleId);
 
             InstalledModulesLock.Instance.AddOrUpdate(lockEntry);
 
             // 6. 更新程序集引用
             try
             {
-                var deps = manifest.GetAllDependencies();
-                AsmdefDependencyResolver.UpdateModuleAsmdefReferences(module.ModuleId, destPath, deps);
+                AsmdefDependencyResolver.UpdateReferences(module.ModuleId, destPath, manifest);
             }
             catch (Exception e)
             {
@@ -721,7 +719,7 @@ namespace Puffin.Editor.Hub.Services
             }
 
             // 检查本地模块的 module.json
-            var modulesDir = Path.Combine(Application.dataPath, "Puffin/Modules");
+            var modulesDir = ManifestService.GetModulesPath();
             if (Directory.Exists(modulesDir))
             {
                 foreach (var moduleDir in Directory.GetDirectories(modulesDir))
@@ -729,14 +727,13 @@ namespace Puffin.Editor.Hub.Services
                     var dirName = Path.GetFileName(moduleDir);
                     if (dirName == moduleId) continue;
 
-                    var manifestPath = Path.Combine(moduleDir, "module.json");
+                    var manifestPath = ManifestService.GetManifestPathFromDir(moduleDir);
                     if (!File.Exists(manifestPath)) continue;
 
                     try
                     {
-                        var json = File.ReadAllText(manifestPath);
-                        var manifest = UnityEngine.JsonUtility.FromJson<HubModuleManifest>(json);
-                        var deps = manifest?.GetAllDependencies();
+                        var manifest = ManifestService.Load(manifestPath);
+                        var deps = manifest?.moduleDependencies;
                         if (deps != null && deps.Exists(d => d.moduleId == moduleId && !d.optional))
                             dependents.Add(manifest.moduleId ?? dirName);
                     }

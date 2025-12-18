@@ -840,10 +840,8 @@ namespace Puffin.Editor.Hub.UI
                             EditorGUILayout.LabelField(_selectedModule.ReleaseNotes, EditorStyles.wordWrappedLabel);
                         }
 
-                        // 显示依赖模块（优先使用 Manifest，否则使用 Dependencies 列表）
-                        var allDeps = _selectedModule.Manifest?.GetAllDependencies();
-                        if ((allDeps == null || allDeps.Count == 0) && _selectedModule.Dependencies != null && _selectedModule.Dependencies.Count > 0)
-                            allDeps = _selectedModule.Dependencies.Select(d => new ModuleDependency(d)).ToList();
+                        // 显示依赖模块
+                        var allDeps = _selectedModule.Manifest?.moduleDependencies ?? _selectedModule.Dependencies;
                         if (allDeps != null && allDeps.Count > 0)
                         {
                             EditorGUILayout.Space(5);
@@ -887,13 +885,12 @@ namespace Puffin.Editor.Hub.UI
                             EditorGUILayout.Space(5);
                             EditorGUILayout.LabelField("环境依赖:", EditorStyles.boldLabel);
                             var sourceNames = new[] { "NuGet", "GitHub", "URL", "Release", "UPM" };
-                            var typeNames = new[] { "DLL", "Source", "Tool", "仅引用" };
+                            var typeNames = new[] { "DLL", "Source", "Tool" };
                             foreach (var env in envDeps)
                             {
                                 var opt = env.optional ? " (可选)" : "";
                                 var ver = !string.IsNullOrEmpty(env.version) ? $" v{env.version}" : "";
-                                // ReferenceOnly 类型显示类型名，其他显示来源
-                                var typeOrSource = env.type == 3 ? typeNames[env.type] : sourceNames[env.source];
+                                var typeOrSource = sourceNames[env.source];
 
                                 // 已安装模块显示环境依赖安装状态
                                 if (_selectedModule.IsInstalled)
@@ -906,6 +903,55 @@ namespace Puffin.Editor.Hub.UI
                                 else
                                 {
                                     EditorGUILayout.LabelField($"  • {env.id}{ver} [{typeOrSource}]{opt}", EditorStyles.miniLabel);
+                                }
+                            }
+                        }
+
+                        // 显示程序集引用
+                        var refs = _selectedModule.Manifest?.references;
+                        var hasRefs = (refs?.asmdefReferences?.Count > 0) || (refs?.dllReferences?.Count > 0);
+                        if (hasRefs)
+                        {
+                            EditorGUILayout.Space(5);
+                            EditorGUILayout.LabelField("程序集引用:", EditorStyles.boldLabel);
+                            if (refs.asmdefReferences != null)
+                            {
+                                foreach (var asmdef in refs.asmdefReferences)
+                                {
+                                    var isOptional = ModuleEditorHelper.IsOptionalReference(asmdef);
+                                    var actualName = ModuleEditorHelper.GetReferenceName(asmdef);
+                                    var optText = isOptional ? " (可选)" : "";
+                                    if (_selectedModule.IsInstalled)
+                                    {
+                                        var found = IsAsmdefAvailable(actualName);
+                                        var status = found ? "✓" : (isOptional ? "○" : "⚠");
+                                        var style = (found || isOptional) ? EditorStyles.miniLabel : new GUIStyle(EditorStyles.miniLabel) { normal = { textColor = Color.yellow } };
+                                        EditorGUILayout.LabelField($"  {status} {actualName}{optText}", style);
+                                    }
+                                    else
+                                    {
+                                        EditorGUILayout.LabelField($"  • {actualName}{optText}", EditorStyles.miniLabel);
+                                    }
+                                }
+                            }
+                            if (refs.dllReferences != null)
+                            {
+                                foreach (var dll in refs.dllReferences)
+                                {
+                                    var isOptional = ModuleEditorHelper.IsOptionalReference(dll);
+                                    var actualName = ModuleEditorHelper.GetReferenceName(dll);
+                                    var optText = isOptional ? " (可选)" : "";
+                                    if (_selectedModule.IsInstalled)
+                                    {
+                                        var found = IsDllAvailable(actualName);
+                                        var status = found ? "✓" : (isOptional ? "○" : "⚠");
+                                        var style = (found || isOptional) ? EditorStyles.miniLabel : new GUIStyle(EditorStyles.miniLabel) { normal = { textColor = Color.yellow } };
+                                        EditorGUILayout.LabelField($"  {status} {actualName}{optText}", style);
+                                    }
+                                    else
+                                    {
+                                        EditorGUILayout.LabelField($"  • {actualName}{optText}", EditorStyles.miniLabel);
+                                    }
                                 }
                             }
                         }
@@ -1168,7 +1214,7 @@ namespace Puffin.Editor.Hub.UI
             module.Author = manifest.author;
             module.Tags = manifest.tags;
             module.ReleaseNotes = manifest.releaseNotes;
-            module.Dependencies = manifest.dependencies;
+            module.Dependencies = manifest.moduleDependencies;
             module.Manifest = manifest;
             Repaint();
         }
@@ -1313,6 +1359,40 @@ namespace Puffin.Editor.Hub.UI
             };
             var depManager = new Puffin.Editor.Environment.DependencyManager();
             return depManager.IsInstalled(depDef);
+        }
+
+        /// <summary>
+        /// 检查 asmdef 引用是否可用
+        /// </summary>
+        private bool IsAsmdefAvailable(string asmdefName)
+        {
+            var guids = AssetDatabase.FindAssets($"t:asmdef {asmdefName}");
+            foreach (var guid in guids)
+            {
+                var path = AssetDatabase.GUIDToAssetPath(guid);
+                if (System.IO.Path.GetFileNameWithoutExtension(path) == asmdefName)
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 检查 DLL 引用是否可用
+        /// </summary>
+        private bool IsDllAvailable(string dllName)
+        {
+            var searchName = dllName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
+                ? System.IO.Path.GetFileNameWithoutExtension(dllName)
+                : dllName;
+            var guids = AssetDatabase.FindAssets($"t:DefaultAsset {searchName}");
+            foreach (var guid in guids)
+            {
+                var path = AssetDatabase.GUIDToAssetPath(guid);
+                if (path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) &&
+                    System.IO.Path.GetFileNameWithoutExtension(path).Equals(searchName, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
         }
 
         /// <summary>

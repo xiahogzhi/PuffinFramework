@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
+using Puffin.Editor.Hub;
 using Puffin.Editor.Hub.Data;
 using Puffin.Editor.Hub.Services;
 using UnityEditor;
@@ -182,7 +183,7 @@ namespace Puffin.Editor.Hub.UI
             _uploadStatus = "准备上传...";
             Repaint();
 
-            var registry = HubSettings.Instance.registries[_selectedRegistryIndex];
+            var registry = _registriesWithToken[_selectedRegistryIndex];
             var success = await _publisher.UploadToGitHubAsync(_packagePath, _validation.Manifest, registry, s => { _uploadStatus = s; Repaint(); });
 
             _isUploading = false;
@@ -200,7 +201,7 @@ namespace Puffin.Editor.Hub.UI
                     registryId = registry.id,
                     checksum = _validation.Manifest.checksum,
                     installedAt = System.DateTime.Now.ToString("o"),
-                    resolvedDependencies = _validation.Manifest.dependencies ?? new System.Collections.Generic.List<string>()
+                    resolvedDependencies = _validation.Manifest.moduleDependencies?.ConvertAll(d => d.moduleId) ?? new System.Collections.Generic.List<string>()
                 };
                 InstalledModulesLock.Instance.AddOrUpdate(lockEntry);
                 Debug.Log($"[Hub] 模块 {_validation.Manifest.moduleId} 已标记为来自 {registry.name}");
@@ -219,19 +220,17 @@ namespace Puffin.Editor.Hub.UI
         /// </summary>
         private void UpdateDependentModulesRegistryInfo(string uploadedModuleId, RegistrySource registry)
         {
-            var modulesPath = System.IO.Path.Combine(Application.dataPath, "Puffin/Modules");
+            var modulesPath = ManifestService.GetModulesPath();
             if (!System.IO.Directory.Exists(modulesPath)) return;
 
             foreach (var moduleDir in System.IO.Directory.GetDirectories(modulesPath))
             {
-                var manifestPath = System.IO.Path.Combine(moduleDir, "module.json");
-                if (!System.IO.File.Exists(manifestPath)) continue;
+                var manifestPath = ManifestService.GetManifestPathFromDir(moduleDir);
+                var manifest = ManifestService.Load(manifestPath);
+                if (manifest?.moduleDependencies == null) continue;
 
                 try
                 {
-                    var json = System.IO.File.ReadAllText(manifestPath);
-                    var manifest = JsonUtility.FromJson<HubModuleManifest>(json);
-                    if (manifest?.moduleDependencies == null) continue;
 
                     var changed = false;
                     foreach (var dep in manifest.moduleDependencies)
@@ -245,8 +244,7 @@ namespace Puffin.Editor.Hub.UI
 
                     if (changed)
                     {
-                        var newJson = JsonUtility.ToJson(manifest, true);
-                        System.IO.File.WriteAllText(manifestPath, newJson);
+                        ManifestService.Save(manifestPath, manifest);
                         Debug.Log($"[Hub] 已更新模块 {manifest.moduleId} 的依赖信息");
                     }
                 }

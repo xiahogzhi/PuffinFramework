@@ -5,40 +5,60 @@ using System.Collections.Generic;
 namespace Puffin.Editor.Hub.Data
 {
     /// <summary>
-    /// 模块依赖配置
+    /// 模块依赖配置（仅用于安装依赖模块）
     /// </summary>
     [Serializable]
     public class ModuleDependency
     {
         public string moduleId;
-        public string version;      // 固定版本，空表示最新
-        public string registryId;   // 指定仓库源，空表示自动选择
-        public bool optional;       // 是否可选依赖
-
-        public ModuleDependency() { }
-        public ModuleDependency(string id, string ver = null, bool opt = false, string registry = null)
-        {
-            // 支持 "moduleId@version" 格式
-            if (id != null && id.Contains("@"))
-            {
-                var parts = id.Split('@');
-                moduleId = parts[0];
-                version = parts.Length > 1 ? parts[1] : ver;
-            }
-            else
-            {
-                moduleId = id;
-                version = ver;
-            }
-            optional = opt;
-            registryId = registry;
-        }
-
-        public override string ToString() => string.IsNullOrEmpty(version) ? moduleId : $"{moduleId}@{version}";
+        public string version;
+        public string registryId;
+        public bool optional;
     }
 
     /// <summary>
-    /// 模块清单 - 描述模块的元数据
+    /// 模块引用配置
+    /// </summary>
+    [Serializable]
+    public class ModuleReference
+    {
+        public string moduleId;
+        public bool includeRuntime = true;
+        public bool includeEditor;
+        public bool optional;
+    }
+
+    /// <summary>
+    /// 程序集引用配置
+    /// </summary>
+    [Serializable]
+    public class AsmdefReferenceConfig
+    {
+        public List<ModuleReference> moduleReferences = new();
+        public List<string> asmdefReferences = new();
+        public List<string> dllReferences = new();
+    }
+
+    /// <summary>
+    /// 环境依赖（仅安装，不处理引用）
+    /// </summary>
+    [Serializable]
+    public class EnvironmentDependency
+    {
+        public string id;
+        public int source;
+        public int type;
+        public string url;
+        public string version;
+        public string installDir;
+        public string extractPath;
+        public string[] requiredFiles;
+        public bool optional;
+        public string[] targetFrameworks;
+    }
+
+    /// <summary>
+    /// 模块清单
     /// </summary>
     [Serializable]
     public class HubModuleManifest
@@ -51,9 +71,9 @@ namespace Puffin.Editor.Hub.Data
         public string[] tags;
         public string unityVersion;
         public string puffinVersion;
-        public List<string> dependencies = new();  // 模块依赖列表（兼容旧格式）
-        public List<ModuleDependency> moduleDependencies = new();  // 新格式依赖列表
+        public List<ModuleDependency> moduleDependencies = new();
         public EnvironmentDependency[] envDependencies;
+        public AsmdefReferenceConfig references;
         public string downloadUrl;
         public string checksum;
         public long size;
@@ -61,63 +81,47 @@ namespace Puffin.Editor.Hub.Data
         public string publishedAt;
 
         /// <summary>
-        /// 获取所有依赖（合并新旧格式）
+        /// 获取所有模块引用（模块依赖自动生成 + 手动配置）
         /// </summary>
-        public List<ModuleDependency> GetAllDependencies()
+        public List<ModuleReference> GetAllModuleReferences()
         {
-            var result = new List<ModuleDependency>();
-            // 添加新格式依赖
+            var result = new List<ModuleReference>();
+
+            // 从非可选模块依赖自动生成引用
             if (moduleDependencies != null)
-                result.AddRange(moduleDependencies);
-            // 添加旧格式依赖（转换为新格式）
-            if (dependencies != null)
             {
-                foreach (var dep in dependencies)
+                foreach (var dep in moduleDependencies)
                 {
-                    // 解析 moduleId（支持 "moduleId@version" 格式）
-                    var depId = dep.Contains("@") ? dep.Split('@')[0] : dep;
-                    if (!result.Exists(d => d.moduleId == depId))
-                        result.Add(new ModuleDependency(dep));
+                    if (!dep.optional)
+                        result.Add(new ModuleReference { moduleId = dep.moduleId, includeRuntime = true, includeEditor = true });
                 }
             }
+
+            // 添加手动配置的模块引用
+            if (references?.moduleReferences != null)
+            {
+                foreach (var modRef in references.moduleReferences)
+                {
+                    var existing = result.Find(r => r.moduleId == modRef.moduleId);
+                    if (existing != null)
+                    {
+                        existing.includeRuntime |= modRef.includeRuntime;
+                        existing.includeEditor |= modRef.includeEditor;
+                    }
+                    else
+                    {
+                        result.Add(modRef);
+                    }
+                }
+            }
+
             return result;
         }
 
-        /// <summary>
-        /// 设置依赖（同时更新新旧格式）
-        /// </summary>
-        public void SetDependencies(List<ModuleDependency> deps)
-        {
-            moduleDependencies = deps ?? new List<ModuleDependency>();
-            dependencies = new List<string>();
-            foreach (var dep in moduleDependencies)
-                dependencies.Add(dep.ToString());
-        }
+        public List<string> GetAsmdefReferences() => references?.asmdefReferences ?? new List<string>();
+        public List<string> GetDllReferences() => references?.dllReferences ?? new List<string>();
     }
 
-    /// <summary>
-    /// 环境依赖 - 复用现有依赖系统
-    /// </summary>
-    [Serializable]
-    public class EnvironmentDependency
-    {
-        public string id;
-        public int source;  // DependencySource
-        public int type;    // DependencyType
-        public string url;
-        public string version;
-        public string installDir;
-        public string extractPath;  // 从压缩包中提取的子路径
-        public string[] requiredFiles;
-        public bool optional;  // 是否可选
-        public string[] targetFrameworks;  // NuGet 目标框架
-        public string[] dllReferences;    // DLL 引用名称列表
-        public string[] asmdefReferences; // 程序集定义引用名称列表
-    }
-
-    /// <summary>
-    /// 仓库索引
-    /// </summary>
     [Serializable]
     public class RegistryIndex
     {
@@ -126,9 +130,6 @@ namespace Puffin.Editor.Hub.Data
         public Dictionary<string, ModuleVersionInfo> modules;
     }
 
-    /// <summary>
-    /// 模块版本信息
-    /// </summary>
     [Serializable]
     public class ModuleVersionInfo
     {
@@ -137,41 +138,29 @@ namespace Puffin.Editor.Hub.Data
         public string updatedAt;
     }
 
-    /// <summary>
-    /// 模块加载状态
-    /// </summary>
-    public enum ModuleLoadState
-    {
-        NotLoaded,  // 未加载
-        Loading,    // 加载中
-        Loaded,     // 已加载
-        Failed      // 加载失败
-    }
+    public enum ModuleLoadState { NotLoaded, Loading, Loaded, Failed }
 
-    /// <summary>
-    /// Hub 显示用的模块信息
-    /// </summary>
     public class HubModuleInfo
     {
         public string ModuleId;
         public string DisplayName;
         public string Description;
-        public string LatestVersion;      // 远程最新版本
-        public string InstalledVersion;   // 本地安装版本
-        public string RemoteVersion;      // 远程版本（用于比较）
+        public string LatestVersion;
+        public string InstalledVersion;
+        public string RemoteVersion;
         public string[] Tags;
         public string Author;
-        public string RegistryId;         // 所属仓库ID（远程模块用）
-        public string SourceRegistryId;   // 安装来源仓库ID（溯源）
-        public string SourceRegistryName; // 安装来源仓库名称
+        public string RegistryId;
+        public string SourceRegistryId;
+        public string SourceRegistryName;
         public bool IsInstalled;
         public bool HasUpdate;
-        public List<string> Versions;     // 所有可用版本
-        public string ReleaseNotes;       // 当前版本的更新日志
-        public List<string> Dependencies; // 依赖列表
+        public List<string> Versions;
+        public string ReleaseNotes;
+        public List<ModuleDependency> Dependencies;
         public HubModuleManifest Manifest;
-        public string UpdatedAt;          // 最后更新时间
-        public ModuleLoadState LoadState; // 加载状态
+        public string UpdatedAt;
+        public ModuleLoadState LoadState;
     }
 }
 #endif

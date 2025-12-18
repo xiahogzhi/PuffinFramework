@@ -46,33 +46,32 @@ namespace Puffin.Editor.Hub.Services
             }
 
             // 检查 module.json
-            var moduleJsonPath = Path.Combine(modulePath, "module.json");
+            var moduleJsonPath = Path.Combine(modulePath, HubConstants.ManifestFileName);
             if (!File.Exists(moduleJsonPath))
             {
-                result.Errors.Add("缺少 module.json 文件");
+                result.Errors.Add($"缺少 {HubConstants.ManifestFileName} 文件");
                 result.IsValid = false;
             }
             else
             {
                 try
                 {
-                    var json = File.ReadAllText(moduleJsonPath);
-                    result.Manifest = JsonUtility.FromJson<HubModuleManifest>(json);
+                    result.Manifest = ManifestService.Load(moduleJsonPath);
 
-                    if (string.IsNullOrEmpty(result.Manifest.moduleId))
+                    if (string.IsNullOrEmpty(result.Manifest?.moduleId))
                     {
-                        result.Errors.Add("module.json 缺少 moduleId");
+                        result.Errors.Add($"{HubConstants.ManifestFileName} 缺少 moduleId");
                         result.IsValid = false;
                     }
-                    if (string.IsNullOrEmpty(result.Manifest.version))
+                    if (string.IsNullOrEmpty(result.Manifest?.version))
                     {
-                        result.Errors.Add("module.json 缺少 version");
+                        result.Errors.Add($"{HubConstants.ManifestFileName} 缺少 version");
                         result.IsValid = false;
                     }
                 }
                 catch (Exception e)
                 {
-                    result.Errors.Add($"module.json 解析失败: {e.Message}");
+                    result.Errors.Add($"{HubConstants.ManifestFileName} 解析失败: {e.Message}");
                     result.IsValid = false;
                 }
             }
@@ -90,7 +89,7 @@ namespace Puffin.Editor.Hub.Services
             // 检查依赖是否都已上传到远程
             if (result.Manifest != null)
             {
-                var deps = result.Manifest.GetAllDependencies();
+                var deps = result.Manifest.moduleDependencies ?? new List<ModuleDependency>();
                 var localDeps = new List<string>();
                 foreach (var dep in deps)
                 {
@@ -120,7 +119,7 @@ namespace Puffin.Editor.Hub.Services
                 return true;
 
             // 检查本地目录是否存在（本地模块）
-            var localPath = Path.Combine(Application.dataPath, $"Puffin/Modules/{moduleId}");
+            var localPath = ManifestService.GetModulePath(moduleId);
             if (!Directory.Exists(localPath))
                 return false; // 模块不存在
 
@@ -204,7 +203,7 @@ namespace Puffin.Editor.Hub.Services
 - Puffin Framework {manifest.puffinVersion ?? "1.0.0+"}
 
 ## 依赖
-{(manifest.dependencies?.Count > 0 ? string.Join("\n", manifest.dependencies.Select(d => $"- {d}")) : "无")}
+{(manifest.moduleDependencies?.Count > 0 ? string.Join("\n", manifest.moduleDependencies.Select(d => $"- {d.moduleId}")) : "无")}
 ";
         }
 

@@ -104,8 +104,6 @@ namespace Puffin.Editor.Environment.UI
                 extractPath = envDep.extractPath,
                 requiredFiles = envDep.requiredFiles,
                 targetFrameworks = envDep.targetFrameworks,
-                dllReferences = envDep.dllReferences,
-                asmdefReferences = envDep.asmdefReferences,
                 requirement = envDep.optional ? DependencyRequirement.Optional : DependencyRequirement.Required
             };
         }

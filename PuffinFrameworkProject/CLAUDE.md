@@ -46,11 +46,14 @@ Assets/Puffin/
 │   │   │   └── RegistrySource.cs
 │   │   ├── Services/
 │   │   │   ├── AsmdefDependencyResolver.cs  # 程序集依赖解析
+│   │   │   ├── ManifestService.cs           # 模块清单服务
 │   │   │   ├── ModuleDependencyResolver.cs  # 模块依赖解析
 │   │   │   ├── ModuleInstaller.cs           # 模块安装
 │   │   │   ├── ModulePublisher.cs           # 模块发布
 │   │   │   ├── ModuleResolver.cs            # 模块解析
 │   │   │   └── RegistryService.cs           # 仓库服务
+│   │   ├── HubConstants.cs                  # Hub常量定义
+│   │   ├── VersionHelper.cs                 # 版本号工具
 │   │   ├── Templates/
 │   │   └── UI/
 │   └── Localization/              # 编辑器本地化
@@ -297,11 +300,30 @@ public class MyScript : GameScript
     "version": "1.0.0",
     "author": "作者",
     "description": "描述",
-    "dependencies": [],
-    "moduleDependencies": [],
-    "envDependencies": []
+    "moduleDependencies": [
+        { "moduleId": "OtherModule", "version": "1.0.0", "optional": false }
+    ],
+    "envDependencies": [
+        { "id": "UniTask", "source": 0, "type": 0, "version": "2.5.0" }
+    ],
+    "references": {
+        "asmdefReferences": ["UniTask", "#DOTween"],
+        "dllReferences": ["Newtonsoft.Json.dll", "#Optional.dll"]
+    }
 }
 ```
+
+**引用配置说明：**
+- `asmdefReferences`: 程序集定义引用（无后缀）
+- `dllReferences`: DLL 引用（.dll 后缀）
+- `#` 前缀表示可选引用，不存在时跳过，不会报错
+
+**环境依赖来源 (source)：**
+- 0: NuGet
+- 1: GitHub Repo
+- 2: Direct URL
+- 3: GitHub Release
+- 4: Unity Package
 
 ## 开发规范
 

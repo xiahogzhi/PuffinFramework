@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using UnityEditor;
 using UnityEngine;
 
 namespace Puffin.Editor.Environment.Core
@@ -28,73 +27,28 @@ namespace Puffin.Editor.Environment.Core
         }
 
         /// <summary>
-        /// 安装后处理：检测并创建 asmdef，添加引用到相关模块
+        /// 安装后处理：检测并创建 asmdef（不再自动添加引用，引用由模块配置管理）
         /// </summary>
         public static void OnInstalled(DependencyDefinition dep, string destDir)
         {
             var hasCs = Directory.GetFiles(destDir, "*.cs", SearchOption.AllDirectories).Length > 0;
-            var hasDll = Directory.GetFiles(destDir, "*.dll", SearchOption.AllDirectories).Length > 0;
             var existingAsmdef =
                 Directory.GetFiles(destDir, "*.asmdef", SearchOption.TopDirectoryOnly).FirstOrDefault();
-
-            string asmdefName = null;
 
             // 有代码但没有 asmdef，创建一个
             if (hasCs && existingAsmdef == null && !string.IsNullOrEmpty(dep.asmdefName))
             {
-                asmdefName = dep.asmdefName ?? dep.id.Replace(".", "_");
+                var asmdefName = dep.asmdefName ?? dep.id.Replace(".", "_");
                 CreateAsmdef(destDir, asmdefName);
-            }
-            else if (existingAsmdef != null)
-            {
-                asmdefName = Path.GetFileNameWithoutExtension(existingAsmdef);
-            }
-
-            // 扫描引用此依赖的模块，添加引用
-            var modules = FindModulesUsingDep(dep.id);
-            foreach (var moduleAsmdef in modules)
-            {
-                // 添加程序集引用（优先使用配置，否则使用检测到的）
-                if (dep.asmdefReferences is {Length: > 0})
-                {
-                    foreach (var asmRef in dep.asmdefReferences)
-                        AddAsmdefReference(moduleAsmdef, asmRef);
-                }
-                else if (asmdefName != null)
-                {
-                    AddAsmdefReference(moduleAsmdef, asmdefName);
-                }
-
-                // 添加 DLL 引用（优先使用配置，否则自动检测）
-                if (dep.dllReferences is {Length: > 0})
-                {
-                    AddDllReferencesByName(moduleAsmdef, dep.dllReferences);
-                }
-                else if (hasDll)
-                {
-                    AddDllReferences(moduleAsmdef, destDir);
-                }
             }
         }
 
         /// <summary>
-        /// 卸载前处理：移除引用
+        /// 卸载前处理（引用由模块配置管理，此处不再处理）
         /// </summary>
         public static void OnUninstalling(DependencyDefinition dep, string destDir)
         {
-            var existingAsmdef = Directory.Exists(destDir)
-                ? Directory.GetFiles(destDir, "*.asmdef", SearchOption.TopDirectoryOnly).FirstOrDefault()
-                : null;
-            var asmdefName = existingAsmdef != null ? Path.GetFileNameWithoutExtension(existingAsmdef) : null;
-
-            var modules = FindModulesUsingDep(dep.id);
-            foreach (var moduleAsmdef in modules)
-            {
-                if (asmdefName != null)
-                    RemoveAsmdefReference(moduleAsmdef, asmdefName);
-                if (Directory.Exists(destDir))
-                    RemoveDllReferences(moduleAsmdef, destDir);
-            }
+            // 引用由模块的 references 配置管理，不再在此处理
         }
 
         private static void CreateAsmdef(string destDir, string asmdefName)
@@ -114,137 +68,6 @@ namespace Puffin.Editor.Environment.Core
             }
 
             return false;
-        }
-
-        private static List<string> FindModulesUsingDep(string depId)
-        {
-            var result = new List<string>();
-            var modulesDir = Path.Combine(Application.dataPath, "Puffin/Modules");
-            if (!Directory.Exists(modulesDir)) return result;
-
-            foreach (var moduleDir in Directory.GetDirectories(modulesDir))
-            {
-                var manifestPath = Path.Combine(moduleDir, "module.json");
-                if (!File.Exists(manifestPath)) continue;
-
-                try
-                {
-                    var json = File.ReadAllText(manifestPath);
-                    var manifest = JsonUtility.FromJson<Hub.Data.HubModuleManifest>(json);
-                    if (manifest?.envDependencies?.Any(d => d.id == depId) == true)
-                    {
-                        // 查找该模块的 Runtime asmdef
-                        var runtimeDir = Path.Combine(moduleDir, "Runtime");
-                        if (Directory.Exists(runtimeDir))
-                        {
-                            var asmdef = Directory.GetFiles(runtimeDir, "*.asmdef", SearchOption.TopDirectoryOnly)
-                                .FirstOrDefault();
-                            if (asmdef != null) result.Add(asmdef);
-                        }
-                    }
-                }
-                catch
-                {
-                }
-            }
-
-            return result;
-        }
-
-        private static void AddAsmdefReference(string moduleAsmdefPath, string targetAsmdefName)
-        {
-            AssetDatabase.Refresh();
-            var guid = GetAsmdefGuid(targetAsmdefName);
-            if (string.IsNullOrEmpty(guid)) return;
-
-            var json = File.ReadAllText(moduleAsmdefPath);
-            var data = JsonUtility.FromJson<AsmdefData>(json);
-            var refName = $"GUID:{guid}";
-            if (!data.references.Contains(refName))
-            {
-                data.references.Add(refName);
-                File.WriteAllText(moduleAsmdefPath, JsonUtility.ToJson(data, true));
-            }
-        }
-
-        private static void RemoveAsmdefReference(string moduleAsmdefPath, string targetAsmdefName)
-        {
-            var guid = GetAsmdefGuid(targetAsmdefName);
-            if (string.IsNullOrEmpty(guid)) return;
-
-            var json = File.ReadAllText(moduleAsmdefPath);
-            var data = JsonUtility.FromJson<AsmdefData>(json);
-            if (data.references.Remove($"GUID:{guid}"))
-                File.WriteAllText(moduleAsmdefPath, JsonUtility.ToJson(data, true));
-        }
-
-        private static void AddDllReferences(string moduleAsmdefPath, string destDir)
-        {
-            var dlls = Directory.GetFiles(destDir, "*.dll", SearchOption.AllDirectories)
-                .Select(Path.GetFileName).ToList();
-            if (dlls.Count == 0) return;
-            AddDllReferencesByName(moduleAsmdefPath, dlls.ToArray());
-        }
-
-        private static void AddDllReferencesByName(string moduleAsmdefPath, string[] dllNames)
-        {
-            if (dllNames == null || dllNames.Length == 0) return;
-
-            var json = File.ReadAllText(moduleAsmdefPath);
-            var data = JsonUtility.FromJson<AsmdefData>(json);
-            var changed = false;
-
-            foreach (var dll in dllNames)
-            {
-                if (!data.precompiledReferences.Contains(dll))
-                {
-                    data.precompiledReferences.Add(dll);
-                    changed = true;
-                }
-            }
-
-            if (changed)
-            {
-                data.overrideReferences = true;
-                File.WriteAllText(moduleAsmdefPath, JsonUtility.ToJson(data, true));
-            }
-        }
-
-        private static void RemoveDllReferences(string moduleAsmdefPath, string destDir)
-        {
-            var dlls = Directory.GetFiles(destDir, "*.dll", SearchOption.AllDirectories)
-                .Select(Path.GetFileName).ToList();
-            if (dlls.Count == 0) return;
-
-            var json = File.ReadAllText(moduleAsmdefPath);
-            var data = JsonUtility.FromJson<AsmdefData>(json);
-            var changed = false;
-
-            foreach (var dll in dlls)
-            {
-                if (data.precompiledReferences.Remove(dll))
-                    changed = true;
-            }
-
-            if (changed)
-            {
-                if (data.precompiledReferences.Count == 0)
-                    data.overrideReferences = false;
-                File.WriteAllText(moduleAsmdefPath, JsonUtility.ToJson(data, true));
-            }
-        }
-
-        private static string GetAsmdefGuid(string asmdefName)
-        {
-            var guids = AssetDatabase.FindAssets($"t:AssemblyDefinitionAsset {asmdefName}");
-            foreach (var guid in guids)
-            {
-                var path = AssetDatabase.GUIDToAssetPath(guid);
-                if (Path.GetFileNameWithoutExtension(path) == asmdefName)
-                    return guid;
-            }
-
-            return "";
         }
     }
 }

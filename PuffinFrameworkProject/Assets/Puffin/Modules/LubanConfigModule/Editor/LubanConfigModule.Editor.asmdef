@@ -1,0 +1,21 @@
+{
+    "name": "LubanConfigModule.Editor",
+    "rootNamespace": "",
+    "references": [
+        "PuffinFramework.Runtime",
+        "LubanConfigModule.Runtime",
+        "PuffinFramework.Editor",
+        "Test",
+        "UniTask"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "noEngineReferences": false
+}

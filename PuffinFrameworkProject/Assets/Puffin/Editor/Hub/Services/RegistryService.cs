@@ -6,6 +6,7 @@ using System.Linq;
 using Cysharp.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Puffin.Editor.Hub;
 using Puffin.Editor.Hub.Data;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -17,6 +18,7 @@ namespace Puffin.Editor.Hub.Services
     /// </summary>
     public class RegistryService
     {
+        private static string ModulesPath => ManifestService.GetModulesPath();
         private readonly Dictionary<string, RegistryIndex> _indexCache = new();
         private readonly Dictionary<string, DateTime> _indexCacheTime = new();
         private readonly Dictionary<string, HubModuleManifest> _manifestCache = new();
@@ -29,10 +31,9 @@ namespace Puffin.Editor.Hub.Services
             var result = new List<HubModuleInfo>();
 
             // 扫描模块目录
-            var modulesPath = Path.Combine(UnityEngine.Application.dataPath, "Puffin/Modules");
-            if (Directory.Exists(modulesPath))
+            if (Directory.Exists(ModulesPath))
             {
-                foreach (var dir in Directory.GetDirectories(modulesPath))
+                foreach (var dir in Directory.GetDirectories(ModulesPath))
                 {
                     var info = CreateModuleInfoFromDir(dir);
                     if (info != null)
@@ -51,10 +52,7 @@ namespace Puffin.Editor.Hub.Services
             if (!IsValidModule(dir))
                 return null;
 
-            var moduleJsonPath = Path.Combine(dir, "module.json");
-            var json = File.ReadAllText(moduleJsonPath);
-            // 使用 Newtonsoft.Json 以正确解析 moduleDependencies 等复杂字段
-            var manifest = JsonConvert.DeserializeObject<HubModuleManifest>(json);
+            var manifest = ManifestService.Load(ManifestService.GetManifestPathFromDir(dir));
 
             var moduleId = manifest?.moduleId ?? folderName;
             var version = manifest?.version;
@@ -75,7 +73,7 @@ namespace Puffin.Editor.Hub.Services
                 Author = manifest?.author,
                 Tags = manifest?.tags,
                 ReleaseNotes = manifest?.releaseNotes,
-                Dependencies = manifest?.dependencies,
+                Dependencies = manifest?.moduleDependencies,
                 LatestVersion = version,
                 InstalledVersion = version,
                 RegistryId = sourceRegistryId ?? "local",
@@ -94,18 +92,17 @@ namespace Puffin.Editor.Hub.Services
         private bool IsValidModule(string moduleDir)
         {
             // 1. 必须有 module.json
-            var moduleJsonPath = Path.Combine(moduleDir, "module.json");
-            if (!File.Exists(moduleJsonPath))
+            if (!File.Exists(ManifestService.GetManifestPathFromDir(moduleDir)))
                 return false;
 
             // 2. 必须有 Runtime 或 Editor 目录
-            var hasRuntime = Directory.Exists(Path.Combine(moduleDir, "Runtime"));
-            var hasEditor = Directory.Exists(Path.Combine(moduleDir, "Editor"));
+            var hasRuntime = Directory.Exists(Path.Combine(moduleDir, HubConstants.RuntimeFolder));
+            var hasEditor = Directory.Exists(Path.Combine(moduleDir, HubConstants.EditorFolder));
             if (!hasRuntime && !hasEditor)
                 return false;
 
             // 3. 必须有程序集定义文件 (.asmdef)
-            var asmdefFiles = Directory.GetFiles(moduleDir, "*.asmdef", SearchOption.AllDirectories);
+            var asmdefFiles = Directory.GetFiles(moduleDir, $"*{HubConstants.AsmdefExtension}", SearchOption.AllDirectories);
             if (asmdefFiles.Length == 0)
                 return false;
 
@@ -159,7 +156,7 @@ namespace Puffin.Editor.Hub.Services
                     info.HasUpdate = isInstalled &&
                                      !string.IsNullOrEmpty(installed?.InstalledVersion) &&
                                      !string.IsNullOrEmpty(versionInfo.latest) &&
-                                     CompareVersions(versionInfo.latest, installed.InstalledVersion) > 0;
+                                     VersionHelper.Compare(versionInfo.latest, installed.InstalledVersion) > 0;
 
                     result.Add(info);
                 }
@@ -200,7 +197,7 @@ namespace Puffin.Editor.Hub.Services
                     module.Author = manifest.author;
                     module.Tags = manifest.tags;
                     module.ReleaseNotes = manifest.releaseNotes;
-                    module.Dependencies = manifest.dependencies;
+                    module.Dependencies = manifest.moduleDependencies;
                     module.Manifest = manifest;
                     module.LoadState = ModuleLoadState.Loaded;
                     return true;
@@ -299,7 +296,7 @@ namespace Puffin.Editor.Hub.Services
             if (string.IsNullOrEmpty(json))
                 return null;
 
-            var manifest = JsonUtility.FromJson<HubModuleManifest>(json);
+            var manifest = JsonConvert.DeserializeObject<HubModuleManifest>(json);
             if (manifest != null)
                 _manifestCache[cacheKey] = manifest;
 
@@ -432,19 +429,6 @@ namespace Puffin.Editor.Hub.Services
             return result;
         }
 
-        private int CompareVersions(string v1, string v2)
-        {
-            var parts1 = v1.Split('.');
-            var parts2 = v2.Split('.');
-
-            for (var i = 0; i < Math.Max(parts1.Length, parts2.Length); i++)
-            {
-                var p1 = i < parts1.Length && int.TryParse(parts1[i], out var n1) ? n1 : 0;
-                var p2 = i < parts2.Length && int.TryParse(parts2[i], out var n2) ? n2 : 0;
-                if (p1 != p2) return p1.CompareTo(p2);
-            }
-            return 0;
-        }
     }
 }
 #endif

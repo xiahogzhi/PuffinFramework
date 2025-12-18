@@ -143,8 +143,8 @@ namespace Puffin.Editor.Hub.Services
                     Manifest = manifest
                 };
 
-                // 处理依赖（新格式优先）
-                var allDeps = manifest.GetAllDependencies();
+                // 处理依赖
+                var allDeps = manifest.moduleDependencies ?? new List<ModuleDependency>();
                 foreach (var dep in allDeps)
                 {
                     if (resolved.ContainsKey(dep.moduleId))
@@ -257,7 +257,7 @@ namespace Puffin.Editor.Hub.Services
                     return;
                 visited.Add(module.ModuleId);
 
-                var deps = module.Manifest?.GetAllDependencies();
+                var deps = module.Manifest?.moduleDependencies;
                 if (deps != null)
                 {
                     foreach (var dep in deps)

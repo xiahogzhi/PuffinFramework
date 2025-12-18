@@ -117,14 +117,14 @@ namespace Puffin.Editor.Hub.UI
             manifest.moduleId = moduleId;
             if (string.IsNullOrEmpty(manifest.displayName)) manifest.displayName = moduleId;
             manifest.envDependencies = _data.EnvDependencies.Count > 0 ? _data.EnvDependencies.ToArray() : null;
-            manifest.SetDependencies(_data.Dependencies);
+            manifest.moduleDependencies = _data.Dependencies ?? new List<ModuleDependency>();
 
             var json = JsonUtility.ToJson(manifest, true);
             System.IO.File.WriteAllText($"{Application.dataPath}/Puffin/Modules/{moduleId}/module.json", json);
 
             // 更新 asmdef 依赖
             var modulePath = System.IO.Path.Combine(Application.dataPath, $"Puffin/Modules/{moduleId}");
-            AsmdefDependencyResolver.UpdateModuleAsmdefReferences(moduleId, modulePath, _data.Dependencies);
+            AsmdefDependencyResolver.UpdateReferences(moduleId, modulePath, manifest);
 
             AssetDatabase.Refresh();
             _onCreated?.Invoke();

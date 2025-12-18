@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Puffin.Editor.Hub;
 using Puffin.Editor.Hub.Data;
+using Puffin.Editor.Hub.Services;
 using UnityEditor;
 using UnityEngine;
 
@@ -251,12 +253,13 @@ namespace Puffin.Editor.Hub.UI
         {
             if (_selectedModule == null) return;
 
-            var dep = new ModuleDependency(
-                _selectedModule.ModuleId,
-                _selectedVersion,
-                _isOptional,
-                _selectedModule.SourceRegistryId ?? _selectedModule.RegistryId
-            );
+            var dep = new ModuleDependency
+            {
+                moduleId = _selectedModule.ModuleId,
+                version = _selectedVersion,
+                optional = _isOptional,
+                registryId = _selectedModule.SourceRegistryId ?? _selectedModule.RegistryId
+            };
             _onSelected?.Invoke(dep);
             Close();
         }
@@ -273,7 +276,7 @@ namespace Puffin.Editor.Hub.UI
             var options = new List<string> { "最新" };
             if (_selectedModule.Versions != null)
             {
-                var sorted = _selectedModule.Versions.OrderByDescending(v => v, new VersionComparer()).ToList();
+                var sorted = _selectedModule.Versions.OrderByDescending(v => v, VersionHelper.Comparer).ToList();
                 options.AddRange(sorted);
             }
             else if (!string.IsNullOrEmpty(_selectedModule.InstalledVersion))
@@ -281,22 +284,6 @@ namespace Puffin.Editor.Hub.UI
                 options.Add(_selectedModule.InstalledVersion);
             }
             return options.ToArray();
-        }
-
-        private class VersionComparer : IComparer<string>
-        {
-            public int Compare(string x, string y)
-            {
-                var px = x.Split('.');
-                var py = y.Split('.');
-                for (var i = 0; i < Math.Max(px.Length, py.Length); i++)
-                {
-                    var a = i < px.Length && int.TryParse(px[i], out var na) ? na : 0;
-                    var b = i < py.Length && int.TryParse(py[i], out var nb) ? nb : 0;
-                    if (a != b) return a.CompareTo(b);
-                }
-                return 0;
-            }
         }
     }
 }

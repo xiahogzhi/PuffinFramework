@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Puffin.Editor.Hub;
 using Puffin.Editor.Hub.Data;
+using Puffin.Editor.Hub.Services;
 using UnityEditor;
 using UnityEngine;
 
@@ -27,6 +29,9 @@ namespace Puffin.Editor.Hub.UI
         // 环境依赖显示状态
         public bool ShowEnvSection;
 
+        // 引用配置 (asmdef无后缀, dll有.dll后缀, 用分号分隔)
+        public string ReferencesText = "";
+
         // 当前模块ID（用于过滤自身）
         public string CurrentModuleId;
 
@@ -48,7 +53,7 @@ namespace Puffin.Editor.Hub.UI
         private List<string> GetModulesDependingOn(string targetModuleId)
         {
             var result = new HashSet<string>();
-            var modulesDir = Path.Combine(Application.dataPath, "Puffin/Modules");
+            var modulesDir = ManifestService.GetModulesPath();
             if (!Directory.Exists(modulesDir)) return result.ToList();
 
             // 构建依赖图：moduleId -> 它依赖的模块列表
@@ -56,17 +61,11 @@ namespace Puffin.Editor.Hub.UI
             foreach (var dir in Directory.GetDirectories(modulesDir))
             {
                 var moduleId = Path.GetFileName(dir);
-                var manifestPath = Path.Combine(dir, "module.json");
-                if (!File.Exists(manifestPath)) continue;
+                var manifest = ManifestService.Load(ManifestService.GetManifestPathFromDir(dir));
+                if (manifest == null) continue;
 
-                try
-                {
-                    var json = File.ReadAllText(manifestPath);
-                    var manifest = JsonUtility.FromJson<HubModuleManifest>(json);
-                    var deps = manifest.GetAllDependencies().Select(d => d.moduleId).ToList();
-                    depGraph[moduleId] = deps;
-                }
-                catch { depGraph[moduleId] = new List<string>(); }
+                var deps = manifest.moduleDependencies?.Select(d => d.moduleId).ToList() ?? new List<string>();
+                depGraph[moduleId] = deps;
             }
 
             // 找出所有直接或间接依赖 targetModuleId 的模块
@@ -147,7 +146,7 @@ namespace Puffin.Editor.Hub.UI
             {
                 var dep = data.Dependencies[i];
                 var depInfo = data.AvailableModules?.Find(m => m.ModuleId == dep.moduleId);
-                var isInstalled = depInfo?.IsInstalled ?? System.IO.Directory.Exists(System.IO.Path.Combine(Application.dataPath, $"Puffin/Modules/{dep.moduleId}"));
+                var isInstalled = depInfo?.IsInstalled ?? ManifestService.ModuleExists(dep.moduleId);
 
                 if (data.EditingDepIndex == i)
                     DrawDependencyEditMode(data, i, dep, depInfo);
@@ -338,7 +337,7 @@ namespace Puffin.Editor.Hub.UI
                 }
             }
             var result = versions.ToList();
-            result.Sort((a, b) => CompareVersions(b, a));
+            result.Sort((a, b) => VersionHelper.Compare(b, a));
             return result;
         }
 
@@ -354,17 +353,60 @@ namespace Puffin.Editor.Hub.UI
             return result;
         }
 
-        public static int CompareVersions(string v1, string v2)
+        /// <summary>
+        /// 绘制引用配置部分
+        /// </summary>
+        public static void DrawReferencesSection(ModuleEditorData data)
         {
-            var parts1 = v1.Split('.');
-            var parts2 = v2.Split('.');
-            for (var i = 0; i < Math.Max(parts1.Length, parts2.Length); i++)
-            {
-                var p1 = i < parts1.Length && int.TryParse(parts1[i], out var n1) ? n1 : 0;
-                var p2 = i < parts2.Length && int.TryParse(parts2[i], out var n2) ? n2 : 0;
-                if (p1 != p2) return p1.CompareTo(p2);
-            }
-            return 0;
+            EditorGUILayout.Space(10);
+            EditorGUILayout.LabelField("程序集引用", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("  格式: asmdef 或 xxx.dll，#前缀为可选，分号分隔", EditorStyles.miniLabel);
+            data.ReferencesText = EditorGUILayout.TextField("  ", data.ReferencesText);
         }
+
+        /// <summary>
+        /// 解析引用文本为 asmdef 和 dll 列表（保留#前缀表示可选）
+        /// </summary>
+        public static void ParseReferences(string text, out List<string> asmdefRefs, out List<string> dllRefs)
+        {
+            asmdefRefs = new List<string>();
+            dllRefs = new List<string>();
+            if (string.IsNullOrWhiteSpace(text)) return;
+
+            foreach (var item in text.Split(';'))
+            {
+                var trimmed = item.Trim();
+                if (string.IsNullOrEmpty(trimmed)) continue;
+                // 获取实际名称（去掉#前缀）
+                var name = trimmed.StartsWith("#") ? trimmed.Substring(1) : trimmed;
+                var prefix = trimmed.StartsWith("#") ? "#" : "";
+                if (name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                    dllRefs.Add(prefix + name);
+                else
+                    asmdefRefs.Add(prefix + name);
+            }
+        }
+
+        /// <summary>
+        /// 合并 asmdef 和 dll 列表为引用文本
+        /// </summary>
+        public static string CombineReferences(List<string> asmdefRefs, List<string> dllRefs)
+        {
+            var all = new List<string>();
+            if (asmdefRefs != null) all.AddRange(asmdefRefs);
+            if (dllRefs != null) all.AddRange(dllRefs);
+            return string.Join("; ", all);
+        }
+
+        /// <summary>
+        /// 判断引用是否为可选（#前缀）
+        /// </summary>
+        public static bool IsOptionalReference(string refName) => refName?.StartsWith("#") ?? false;
+
+        /// <summary>
+        /// 获取引用的实际名称（去掉#前缀）
+        /// </summary>
+        public static string GetReferenceName(string refName) =>
+            refName?.StartsWith("#") == true ? refName.Substring(1) : refName;
     }
 }

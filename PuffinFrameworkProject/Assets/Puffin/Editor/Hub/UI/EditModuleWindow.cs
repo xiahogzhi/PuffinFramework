@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Puffin.Editor.Hub;
 using Puffin.Editor.Hub.Data;
 using Puffin.Editor.Hub.Services;
 using Puffin.Runtime.Settings;
@@ -34,14 +35,18 @@ namespace Puffin.Editor.Hub.UI
 
         private void LoadManifest()
         {
-            var jsonPath = System.IO.Path.Combine(_modulePath, "module.json");
-            if (System.IO.File.Exists(jsonPath))
+            var jsonPath = System.IO.Path.Combine(_modulePath, HubConstants.ManifestFileName);
+            var manifest = ManifestService.Load(jsonPath);
+            if (manifest != null)
             {
-                var json = System.IO.File.ReadAllText(jsonPath);
-                _data.Manifest = JsonUtility.FromJson<HubModuleManifest>(json);
+                _data.Manifest = manifest;
                 _originalId = _data.Manifest.moduleId;
-                _data.Dependencies = _data.Manifest.GetAllDependencies();
+                _data.Dependencies = _data.Manifest.moduleDependencies ?? new List<ModuleDependency>();
                 _data.EnvDependencies = _data.Manifest.envDependencies != null ? new List<EnvironmentDependency>(_data.Manifest.envDependencies) : new();
+                // 加载引用配置
+                _data.ReferencesText = ModuleEditorHelper.CombineReferences(
+                    manifest.references?.asmdefReferences,
+                    manifest.references?.dllReferences);
             }
             else
             {
@@ -50,8 +55,8 @@ namespace Puffin.Editor.Hub.UI
             }
 
             _data.CurrentModuleId = _data.Manifest.moduleId;
-            _hasEditor = System.IO.Directory.Exists(System.IO.Path.Combine(_modulePath, "Editor"));
-            _hasResources = System.IO.Directory.Exists(System.IO.Path.Combine(_modulePath, "Resources"));
+            _hasEditor = System.IO.Directory.Exists(System.IO.Path.Combine(_modulePath, HubConstants.EditorFolder));
+            _hasResources = System.IO.Directory.Exists(System.IO.Path.Combine(_modulePath, HubConstants.ResourcesFolder));
         }
 
         private void OnGUI()
@@ -69,7 +74,10 @@ namespace Puffin.Editor.Hub.UI
             // 3. 依赖模块
             ModuleEditorHelper.DrawDependenciesSection(_data);
 
-            // 4. 环境依赖
+            // 4. 程序集引用
+            ModuleEditorHelper.DrawReferencesSection(_data);
+
+            // 5. 环境依赖
             ModuleEditorHelper.DrawEnvDependenciesSection(_data);
 
             EditorGUILayout.EndScrollView();
@@ -156,8 +164,8 @@ namespace Puffin.Editor.Hub.UI
             }
 
             AssetDatabase.Refresh();
-            _hasEditor = System.IO.Directory.Exists(System.IO.Path.Combine(_modulePath, "Editor"));
-            _hasResources = System.IO.Directory.Exists(System.IO.Path.Combine(_modulePath, "Resources"));
+            _hasEditor = System.IO.Directory.Exists(System.IO.Path.Combine(_modulePath, HubConstants.EditorFolder));
+            _hasResources = System.IO.Directory.Exists(System.IO.Path.Combine(_modulePath, HubConstants.ResourcesFolder));
         }
 
         private void SaveManifest()
@@ -166,13 +174,21 @@ namespace Puffin.Editor.Hub.UI
             var idChanged = newId != _originalId;
 
             // 保存依赖
-            _data.Manifest.SetDependencies(_data.Dependencies);
+            _data.Manifest.moduleDependencies = _data.Dependencies ?? new List<ModuleDependency>();
             _data.Manifest.envDependencies = _data.EnvDependencies.Count > 0 ? _data.EnvDependencies.ToArray() : null;
 
+            // 保存引用配置
+            ModuleEditorHelper.ParseReferences(_data.ReferencesText, out var asmdefRefs, out var dllRefs);
+            var hasRefs = asmdefRefs.Count > 0 || dllRefs.Count > 0;
+            _data.Manifest.references = hasRefs ? new AsmdefReferenceConfig
+            {
+                asmdefReferences = asmdefRefs,
+                dllReferences = dllRefs
+            } : null;
+
             // 先保存 module.json
-            var jsonPath = System.IO.Path.Combine(_modulePath, "module.json");
-            var json = JsonUtility.ToJson(_data.Manifest, true);
-            System.IO.File.WriteAllText(jsonPath, json);
+            var jsonPath = System.IO.Path.Combine(_modulePath, HubConstants.ManifestFileName);
+            ManifestService.Save(jsonPath, _data.Manifest);
 
             // 如果 ID 改变，重命名 asmdef 文件并更新内容
             if (idChanged)
@@ -195,7 +211,7 @@ namespace Puffin.Editor.Hub.UI
             }
 
             // 更新 asmdef 依赖
-            AsmdefDependencyResolver.UpdateModuleAsmdefReferences(newId, _modulePath, _data.Dependencies);
+            AsmdefDependencyResolver.UpdateReferences(newId, _modulePath, _data.Manifest);
 
             AssetDatabase.Refresh();
             _onSaved?.Invoke();
