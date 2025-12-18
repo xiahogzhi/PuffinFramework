@@ -17,6 +17,8 @@ namespace Puffin.Editor.Hub.Services
     [InitializeOnLoad]
     public static class AsmdefDependencyResolver
     {
+        private static bool _isResolving;
+
         static AsmdefDependencyResolver()
         {
             EditorApplication.delayCall += () => ResolveAll();
@@ -99,36 +101,48 @@ namespace Puffin.Editor.Hub.Services
 
         public static void ResolveAll()
         {
-            CleanupMissingReferences();
+            if (_isResolving) return;
+            _isResolving = true;
 
-            var modulesDir = ManifestService.GetModulesPath();
-            if (!Directory.Exists(modulesDir)) return;
-
-            foreach (var dir in Directory.GetDirectories(modulesDir))
+            try
             {
-                var manifestPath = ManifestService.GetManifestPathFromDir(dir);
-                if (!File.Exists(manifestPath)) continue;
+                CleanupMissingReferences();
 
-                try
+                var modulesDir = ManifestService.GetModulesPath();
+                if (!Directory.Exists(modulesDir)) return;
+
+                foreach (var dir in Directory.GetDirectories(modulesDir))
                 {
-                    var manifest = ManifestService.Load(manifestPath);
-                    UpdateReferences(Path.GetFileName(dir), dir, manifest);
+                    // 跳过 ~ 目录
+                    if (dir.Contains("~")) continue;
+
+                    var manifestPath = ManifestService.GetManifestPathFromDir(dir);
+                    if (!File.Exists(manifestPath)) continue;
+
+                    try
+                    {
+                        var manifest = ManifestService.Load(manifestPath);
+                        UpdateReferences(Path.GetFileName(dir), dir, manifest);
+                    }
+                    catch (Exception e)
+                    {
+                        Debug.LogWarning($"[AsmdefResolver] {Path.GetFileName(dir)}: {e.Message}");
+                    }
                 }
-                catch (Exception e)
-                {
-                    Debug.LogWarning($"[AsmdefResolver] {Path.GetFileName(dir)}: {e.Message}");
-                }
+
+                ResolveAllEnvDependencies();
             }
-
-            ResolveAllEnvDependencies();
-            AssetDatabase.Refresh();
+            finally
+            {
+                _isResolving = false;
+            }
         }
 
         private static string FindAsmdef(string dir)
         {
-            if (!Directory.Exists(dir)) return null;
+            if (!Directory.Exists(dir) || dir.Contains("~")) return null;
             var files = Directory.GetFiles(dir, "*.asmdef", SearchOption.TopDirectoryOnly);
-            return files.Length > 0 ? files[0] : null;
+            return files.FirstOrDefault(f => !f.Contains("~"));
         }
 
         private static string GetAssemblyName(string moduleId, string type)
@@ -174,16 +188,29 @@ namespace Puffin.Editor.Hub.Services
             var preserved = data.references.Where(r => r.StartsWith("GUID:") ||
                 (!r.Contains(".Runtime") && !r.Contains(".Editor") && !r.StartsWith("PuffinFramework."))).ToList();
 
-            data.references = baseRefs.Concat(depRefs).Concat(preserved).Distinct().ToList();
+            var newRefs = baseRefs.Concat(depRefs).Concat(preserved).Distinct().ToList();
 
+            // 检查引用是否有变化
+            var refsChanged = !data.references.OrderBy(x => x).SequenceEqual(newRefs.OrderBy(x => x));
+
+            if (refsChanged)
+                data.references = newRefs;
+
+            var dllChanged = false;
             if (dllRefs?.Count > 0)
             {
-                data.overrideReferences = true;
                 foreach (var dll in dllRefs.Where(d => !data.precompiledReferences.Contains(d)))
+                {
                     data.precompiledReferences.Add(dll);
+                    dllChanged = true;
+                }
+                if (dllChanged)
+                    data.overrideReferences = true;
             }
 
-            File.WriteAllText(asmdefPath, JsonUtility.ToJson(data, true));
+            // 只有真正有变化时才写入
+            if (refsChanged || dllChanged)
+                File.WriteAllText(asmdefPath, JsonUtility.ToJson(data, true));
         }
 
         /// <summary>
@@ -199,6 +226,9 @@ namespace Puffin.Editor.Hub.Services
 
             foreach (var moduleDir in Directory.GetDirectories(modulesDir))
             {
+                // 跳过 ~ 目录
+                if (moduleDir.Contains("~")) continue;
+
                 var moduleId = Path.GetFileName(moduleDir);
                 var manifestPath = Path.Combine(moduleDir, "module.json");
                 if (!File.Exists(manifestPath)) continue;
@@ -371,6 +401,12 @@ namespace Puffin.Editor.Hub.Services
             var changed = false;
             foreach (var moduleDir in Directory.GetDirectories(modulesDir))
             {
+                // 跳过 ~ 目录
+                if (moduleDir.Contains("~")) continue;
+
+                // 获取模块的环境依赖引用（这些引用不应被清除）
+                var protectedRefs = GetModuleEnvDependencyRefs(moduleDir);
+
                 var runtimeDir = Path.Combine(moduleDir, "Runtime");
                 var editorDir = Path.Combine(moduleDir, "Editor");
 
@@ -381,20 +417,53 @@ namespace Puffin.Editor.Hub.Services
                     ? Directory.GetFiles(editorDir, "*.asmdef", SearchOption.TopDirectoryOnly).FirstOrDefault()
                     : null;
 
-                if (!string.IsNullOrEmpty(runtimeAsmdef) && CleanupAsmdefReferences(runtimeAsmdef))
+                if (!string.IsNullOrEmpty(runtimeAsmdef) && CleanupAsmdefReferences(runtimeAsmdef, protectedRefs))
                     changed = true;
-                if (!string.IsNullOrEmpty(editorAsmdef) && CleanupAsmdefReferences(editorAsmdef))
+                if (!string.IsNullOrEmpty(editorAsmdef) && CleanupAsmdefReferences(editorAsmdef, protectedRefs))
                     changed = true;
             }
 
             if (changed)
             {
                 AssetDatabase.Refresh();
-                Debug.Log("[AsmdefResolver] 已清理丢失的引用");
+                // Debug.Log("[AsmdefResolver] 已清理丢失的引用");
             }
         }
 
-        private static bool CleanupAsmdefReferences(string asmdefPath)
+        /// <summary>
+        /// 获取模块环境依赖中定义的引用（这些引用不应被清除）
+        /// </summary>
+        private static (HashSet<string> asmdefRefs, HashSet<string> dllRefs) GetModuleEnvDependencyRefs(string moduleDir)
+        {
+            var asmdefRefs = new HashSet<string>();
+            var dllRefs = new HashSet<string>();
+
+            var manifestPath = Path.Combine(moduleDir, "module.json");
+            if (!File.Exists(manifestPath)) return (asmdefRefs, dllRefs);
+
+            try
+            {
+                var json = File.ReadAllText(manifestPath);
+                var manifest = JsonUtility.FromJson<HubModuleManifest>(json);
+                if (manifest?.envDependencies == null) return (asmdefRefs, dllRefs);
+
+                foreach (var envDep in manifest.envDependencies)
+                {
+                    if (envDep.asmdefReferences != null)
+                        foreach (var r in envDep.asmdefReferences)
+                            asmdefRefs.Add(r);
+
+                    if (envDep.dllReferences != null)
+                        foreach (var r in envDep.dllReferences)
+                            dllRefs.Add(r);
+                }
+            }
+            catch { }
+
+            return (asmdefRefs, dllRefs);
+        }
+
+        private static bool CleanupAsmdefReferences(string asmdefPath, (HashSet<string> asmdefRefs, HashSet<string> dllRefs) protectedRefs)
         {
             if (!File.Exists(asmdefPath)) return false;
 
@@ -405,7 +474,8 @@ namespace Puffin.Editor.Hub.Services
             var validRefs = new List<string>();
             foreach (var refName in data.references)
             {
-                if (refName.StartsWith("GUID:") || AsmdefExists(refName))
+                // 保留: GUID引用、存在的引用、环境依赖中定义的引用
+                if (refName.StartsWith("GUID:") || AsmdefExists(refName) || protectedRefs.asmdefRefs.Contains(refName))
                     validRefs.Add(refName);
                 else
                     changed = true;
@@ -417,7 +487,8 @@ namespace Puffin.Editor.Hub.Services
                 var validDlls = new List<string>();
                 foreach (var dllName in data.precompiledReferences)
                 {
-                    if (DllExists(dllName))
+                    // 保留: 存在的DLL、环境依赖中定义的DLL
+                    if (DllExists(dllName) || protectedRefs.dllRefs.Contains(dllName))
                         validDlls.Add(dllName);
                     else
                         changed = true;
