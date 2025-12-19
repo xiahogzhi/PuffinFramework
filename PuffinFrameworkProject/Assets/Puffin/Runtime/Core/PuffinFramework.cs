@@ -99,6 +99,9 @@ namespace Puffin.Runtime.Core
         }
 #endif
 
+        /// <summary>
+        /// 重置框架状态，清除所有缓存和引用
+        /// </summary>
         static void Reset()
         {
             Logger = null;
@@ -133,6 +136,9 @@ namespace Puffin.Runtime.Core
                 Logger.Info("Puffin Framework Setup!");
         }
 
+        /// <summary>
+        /// 检查框架是否已安装，未安装则抛出异常
+        /// </summary>
         static void ThrowIfNotSetup()
         {
             if (!IsSetup) throw new Exception("PuffinFramework is not Setup,Please call Setup() method.");
@@ -148,6 +154,9 @@ namespace Puffin.Runtime.Core
             StartAsync().Forget();
         }
 
+        /// <summary>
+        /// 异步启动框架，执行系统扫描、注册和初始化
+        /// </summary>
         static async UniTask StartAsync()
         {
             if (IsInitialized || IsInitializing)
@@ -236,6 +245,9 @@ namespace Puffin.Runtime.Core
         /// </summary>
         public static void Resume() => _runtime?.Resume();
 
+        /// <summary>
+        /// 创建运行时 MonoBehaviour 对象，用于驱动系统更新
+        /// </summary>
         private static void CreateRuntimeBehaviour()
         {
             var go = new GameObject("[PuffinFramework Runtime]");
@@ -243,6 +255,9 @@ namespace Puffin.Runtime.Core
             behaviour.Initialize(_runtime);
         }
 
+        /// <summary>
+        /// 输出系统信息日志
+        /// </summary>
         private static void LogSystemInfo()
         {
             var settings = PuffinSettings.Instance;

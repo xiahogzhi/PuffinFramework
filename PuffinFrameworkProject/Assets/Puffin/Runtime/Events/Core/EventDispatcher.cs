@@ -239,6 +239,9 @@ namespace Puffin.Runtime.Events.Core
             return RegisterInternal(typeof(T), (evt, _, _) => handler((T)evt).Forget(), 0, false);
         }
 
+        /// <summary>
+        /// 更新事件处理器优先级
+        /// </summary>
         internal void UpdatePriority(uint id, int priority)
         {
             if (!_eventRegistry.TryGetValue(id, out var source)) return;
@@ -247,6 +250,9 @@ namespace Puffin.Runtime.Events.Core
             ResortHandlers(source.eventType);
         }
 
+        /// <summary>
+        /// 设置事件为一次性（触发后自动注销）
+        /// </summary>
         internal void SetOnce(uint id, bool once)
         {
             if (!_eventRegistry.TryGetValue(id, out var source)) return;
@@ -254,6 +260,9 @@ namespace Puffin.Runtime.Events.Core
             _eventRegistry[id] = newSource;
         }
 
+        /// <summary>
+        /// 立即调用指定事件处理器
+        /// </summary>
         internal void InvokeHandler(uint id)
         {
             if (!_eventRegistry.TryGetValue(id, out var source)) return;
@@ -270,6 +279,9 @@ namespace Puffin.Runtime.Events.Core
             }
         }
 
+        /// <summary>
+        /// 重新排序事件处理器（按优先级降序）
+        /// </summary>
         private void ResortHandlers(Type eventType)
         {
             if (!_eventRegisterMap.TryGetValue(eventType, out var list)) return;
@@ -394,6 +406,9 @@ namespace Puffin.Runtime.Events.Core
 
         #region Internal
 
+        /// <summary>
+        /// 放入操作队列（防止事件处理中的递归调用）
+        /// </summary>
         private void PutOperation(Operation op)
         {
             if (!_isOperating)
@@ -402,6 +417,9 @@ namespace Puffin.Runtime.Events.Core
                 _operations.Enqueue(op);
         }
 
+        /// <summary>
+        /// 执行操作（注册、注销、发送等）
+        /// </summary>
         private void ExecuteOperation(Operation op)
         {
             if (_isOperating) return;
@@ -439,6 +457,9 @@ namespace Puffin.Runtime.Events.Core
                 ExecuteOperation(_operations.Dequeue());
         }
 
+        /// <summary>
+        /// 执行注册操作
+        /// </summary>
         private void DoRegister(EventSource source)
         {
             var eventType = source.eventType;
@@ -460,6 +481,9 @@ namespace Puffin.Runtime.Events.Core
             });
         }
 
+        /// <summary>
+        /// 执行注销操作
+        /// </summary>
         private void DoUnRegister(uint id)
         {
             if (_eventRegistry.TryGetValue(id, out var source))
@@ -469,6 +493,9 @@ namespace Puffin.Runtime.Events.Core
             }
         }
 
+        /// <summary>
+        /// 执行添加拦截器操作
+        /// </summary>
         private void DoAddInterceptor(EventInterceptor ei)
         {
             if (!_interceptorRegisterMap.TryGetValue(ei.type, out var list))
@@ -488,6 +515,9 @@ namespace Puffin.Runtime.Events.Core
             });
         }
 
+        /// <summary>
+        /// 执行移除拦截器操作
+        /// </summary>
         private void DoRemoveInterceptor(uint id)
         {
             if (_interceptorRegistry.TryGetValue(id, out var ei))
@@ -497,6 +527,9 @@ namespace Puffin.Runtime.Events.Core
             }
         }
 
+        /// <summary>
+        /// 执行发送事件操作
+        /// </summary>
         private void DoSend(EventSendPackage package)
         {
             // 拦截器处理

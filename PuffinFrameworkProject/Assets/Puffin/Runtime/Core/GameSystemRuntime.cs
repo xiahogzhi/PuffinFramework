@@ -103,6 +103,9 @@ namespace Puffin.Runtime.Core
             InitializeDefinedSymbols();
         }
 
+        /// <summary>
+        /// 初始化预定义的条件符号（UNITY_EDITOR、DEBUG、DEVELOPMENT_BUILD）
+        /// </summary>
         private void InitializeDefinedSymbols()
         {
 #if UNITY_EDITOR
@@ -237,6 +240,9 @@ namespace Puffin.Runtime.Core
             }).ToList();
         }
 
+        /// <summary>
+        /// 从程序集名称提取模块ID
+        /// </summary>
         private static string ExtractModuleId(string assemblyName, ModuleRegistrySettings registry)
         {
             if (registry == null) return null;
@@ -559,6 +565,9 @@ namespace Puffin.Runtime.Core
 
         #region 生命周期调用
 
+        /// <summary>
+        /// 每帧更新所有实现 IUpdate 的系统
+        /// </summary>
         public void Update(float deltaTime)
         {
             if (IsPaused) return;
@@ -598,27 +607,45 @@ namespace Puffin.Runtime.Core
             }
         }
 
+        /// <summary>
+        /// 固定时间步更新所有实现 IFixedUpdate 的系统
+        /// </summary>
         public void FixedUpdate(float deltaTime)
         {
             if (IsPaused) return;
             InvokeLifecycle(_fixedUpdateList, sys => sys.OnFixedUpdate(deltaTime));
         }
 
+        /// <summary>
+        /// 延迟更新所有实现 ILateUpdate 的系统
+        /// </summary>
         public void LateUpdate(float deltaTime)
         {
             if (IsPaused) return;
             InvokeLifecycle(_lateUpdateList, sys => sys.OnLateUpdate(deltaTime));
         }
 
+        /// <summary>
+        /// 应用退出时调用
+        /// </summary>
         public void OnApplicationQuit() =>
             InvokeLifecycle(_quitList, sys => sys.OnApplicationQuit(), checkEnabled: false);
 
+        /// <summary>
+        /// 应用焦点变化时调用
+        /// </summary>
         public void OnApplicationFocus(bool focus) =>
             InvokeLifecycle(_focusList, sys => sys.OnApplicationFocus(focus), checkEnabled: false);
 
+        /// <summary>
+        /// 应用暂停时调用
+        /// </summary>
         public void OnApplicationPause(bool pause) =>
             InvokeLifecycle(_pauseList, sys => sys.OnApplicationPause(pause), checkEnabled: false);
 
+        /// <summary>
+        /// 调用生命周期事件
+        /// </summary>
         private void InvokeLifecycle<T>(List<T> list, Action<T> action, bool checkEnabled = true)
         {
             foreach (var sys in list)
@@ -633,6 +660,9 @@ namespace Puffin.Runtime.Core
 
         #region 私有方法
 
+        /// <summary>
+        /// 调用所有系统的注册回调
+        /// </summary>
         private void InvokeRegister()
         {
             if (IsEditorMode) return;
@@ -649,6 +679,9 @@ namespace Puffin.Runtime.Core
             }
         }
 
+        /// <summary>
+        /// 异步初始化所有实现 IInitializeAsync 的系统
+        /// </summary>
         private async UniTask InvokeInitializeAsync()
         {
             if (IsEditorMode)
@@ -676,18 +709,27 @@ namespace Puffin.Runtime.Core
                 _initializedSystems.Add(sys);
         }
 
+        /// <summary>
+        /// 尝试将系统添加到生命周期事件列表
+        /// </summary>
         private void TryAddEvent<T>(IGameSystem system, List<T> list) where T : class
         {
             if (system is T evt)
                 list.Add(evt);
         }
 
+        /// <summary>
+        /// 尝试从生命周期事件列表移除系统
+        /// </summary>
         private void TryRemoveEvent<T>(IGameSystem system, List<T> list) where T : class
         {
             if (system is T evt)
                 list.Remove(evt);
         }
 
+        /// <summary>
+        /// 按优先级排序所有系统列表
+        /// </summary>
         private void SortByPriority()
         {
             int Compare(IGameSystem a, IGameSystem b) => GetSystemPriority(a).CompareTo(GetSystemPriority(b));
@@ -708,11 +750,17 @@ namespace Puffin.Runtime.Core
 
         #region 条件注册
 
+        /// <summary>
+        /// 过滤条件注册的类型，只保留满足条件的系统
+        /// </summary>
         private Type[] FilterConditionalTypes(Type[] types)
         {
             return types.Where(CheckConditional).ToArray();
         }
 
+        /// <summary>
+        /// 检查类型是否满足条件注册（ConditionalSystemAttribute）
+        /// </summary>
         private bool CheckConditional(Type type)
         {
             var attr = type.GetCustomAttribute<ConditionalSystemAttribute>();
@@ -724,6 +772,9 @@ namespace Puffin.Runtime.Core
 
         #region 依赖排序
 
+        /// <summary>
+        /// 拓扑排序处理系统依赖关系
+        /// </summary>
         private Type[] TopologicalSort(Type[] types)
         {
             var typeSet = new HashSet<Type>(types);
@@ -788,12 +839,18 @@ namespace Puffin.Runtime.Core
 
         #region 依赖注入
 
+        /// <summary>
+        /// 为所有已注册系统执行依赖注入
+        /// </summary>
         private void InjectDependencies()
         {
             foreach (var system in _systems)
                 InjectDependencies(system);
         }
 
+        /// <summary>
+        /// 为单个系统执行依赖注入
+        /// </summary>
         private void InjectDependencies(IGameSystem system)
         {
             InjectTo(system);
