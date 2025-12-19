@@ -8,6 +8,9 @@ using UnityEngine.Networking;
 
 namespace Puffin.Editor.Environment.Core
 {
+    /// <summary>
+    /// 文件下载器，支持进度回调和取消操作
+    /// </summary>
     public class Downloader
     {
         public int Timeout { get; set; } = 600;

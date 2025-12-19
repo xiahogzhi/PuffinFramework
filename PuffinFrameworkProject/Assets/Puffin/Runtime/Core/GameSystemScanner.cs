@@ -18,12 +18,21 @@ namespace Puffin.Runtime.Core
         private readonly IPuffinLogger _logger;
         private readonly ScannerConfig _config;
 
+        /// <summary>
+        /// 创建游戏系统扫描器实例
+        /// </summary>
+        /// <param name="logger">日志记录器</param>
+        /// <param name="config">扫描配置，为空则使用默认配置</param>
         public GameSystemScanner(IPuffinLogger logger, ScannerConfig config = null)
         {
             _logger = logger;
             _config = config ?? new ScannerConfig();
         }
 
+        /// <summary>
+        /// 异步扫描所有符合条件的游戏系统类型
+        /// </summary>
+        /// <returns>扫描到的系统类型数组</returns>
         public async UniTask<Type[]> ScanAsync()
         {
             var result = new List<Type>();
@@ -51,6 +60,9 @@ namespace Puffin.Runtime.Core
             return result.ToArray();
         }
 
+        /// <summary>
+        /// 获取需要扫描的程序集列表
+        /// </summary>
         private IEnumerable<Assembly> GetAssembliesToScan()
         {
             // 如果指定了程序集，直接使用
@@ -62,6 +74,11 @@ namespace Puffin.Runtime.Core
                 .Where(ShouldScanAssembly);
         }
 
+        /// <summary>
+        /// 判断程序集是否应该被扫描
+        /// </summary>
+        /// <param name="assembly">待检查的程序集</param>
+        /// <returns>是否应该扫描该程序集</returns>
         private bool ShouldScanAssembly(Assembly assembly)
         {
             var name = assembly.GetName().Name;
@@ -77,6 +94,11 @@ namespace Puffin.Runtime.Core
             return true;
         }
 
+        /// <summary>
+        /// 扫描单个程序集中的系统类型
+        /// </summary>
+        /// <param name="assembly">要扫描的程序集</param>
+        /// <returns>该程序集中的有效系统类型数组</returns>
         private Type[] ScanAssembly(Assembly assembly)
         {
             return assembly.GetTypes()
@@ -84,6 +106,11 @@ namespace Puffin.Runtime.Core
                 .ToArray();
         }
 
+        /// <summary>
+        /// 验证类型是否为有效的游戏系统类型
+        /// </summary>
+        /// <param name="type">待验证的类型</param>
+        /// <returns>是否为有效的系统类型</returns>
         private bool IsValidSystemType(Type type)
         {
             // 基本条件

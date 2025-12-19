@@ -1,10 +1,14 @@
 namespace Puffin.Runtime.Interfaces.SystemEvents
 {
     /// <summary>
-    /// 游戏系统实现这个接口可以实现Update,通过Runtime管理
+    /// 每帧更新接口，实现此接口的系统将在每帧被调用
     /// </summary>
-    public interface IUpdate: IGameSystemEvent
+    public interface IUpdate : IGameSystemEvent
     {
-        public void OnUpdate(float deltaTime);
+        /// <summary>
+        /// 每帧更新回调
+        /// </summary>
+        /// <param name="deltaTime">距上一帧的时间间隔（秒）</param>
+        void OnUpdate(float deltaTime);
     }
 }

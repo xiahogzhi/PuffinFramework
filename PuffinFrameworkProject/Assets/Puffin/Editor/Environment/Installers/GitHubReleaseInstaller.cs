@@ -6,6 +6,9 @@ using Puffin.Editor.Environment.Core;
 
 namespace Puffin.Editor.Environment.Installers
 {
+    /// <summary>
+    /// GitHub Release 安装器，从 GitHub Release 页面下载资源
+    /// </summary>
     public class GitHubReleaseInstaller : IPackageInstaller
     {
         public DependencySource SupportedSource => DependencySource.GitHubRelease;

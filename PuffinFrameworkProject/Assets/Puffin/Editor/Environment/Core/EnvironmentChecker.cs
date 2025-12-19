@@ -4,6 +4,9 @@ using System.IO;
 
 namespace Puffin.Editor.Environment.Core
 {
+    /// <summary>
+    /// 环境检查工具，用于检测文件、目录和命令行工具的可用性
+    /// </summary>
     public static class EnvironmentChecker
     {
         public static bool FileExists(string path) => File.Exists(path);

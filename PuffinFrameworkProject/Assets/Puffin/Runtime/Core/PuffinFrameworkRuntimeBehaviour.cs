@@ -9,6 +9,10 @@ namespace Puffin.Runtime.Core
     {
         private GameSystemRuntime _runtime;
 
+        /// <summary>
+        /// 初始化运行时行为组件
+        /// </summary>
+        /// <param name="runtime">游戏系统运行时实例</param>
         public void Initialize(GameSystemRuntime runtime)
         {
             _runtime = runtime;

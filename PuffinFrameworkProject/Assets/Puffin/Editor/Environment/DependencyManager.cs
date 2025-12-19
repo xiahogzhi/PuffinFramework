@@ -10,6 +10,9 @@ using UnityEngine;
 
 namespace Puffin.Editor.Environment
 {
+    /// <summary>
+    /// 依赖管理器，负责依赖包的安装、卸载和状态检查
+    /// </summary>
     public class DependencyManager
     {
         public static string SharedPluginsDir => Path.Combine(Application.dataPath, "Plugins/Puffin");

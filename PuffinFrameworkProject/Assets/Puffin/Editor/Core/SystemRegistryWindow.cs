@@ -12,6 +12,9 @@ using L = Puffin.Editor.Localization.EditorLocalization;
 
 namespace Puffin.Editor.Core
 {
+    /// <summary>
+    /// 系统注册表窗口，管理游戏系统的启用/禁用状态和接口实现选择
+    /// </summary>
     public class SystemRegistryWindow : EditorWindow
     {
         private Vector2 _scrollPos;

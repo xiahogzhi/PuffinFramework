@@ -7,6 +7,9 @@ using Puffin.Editor.Environment.Core;
 
 namespace Puffin.Editor.Environment.Installers
 {
+    /// <summary>
+    /// 直接 URL 安装器，从指定 URL 下载文件或压缩包
+    /// </summary>
     public class DirectUrlInstaller : IPackageInstaller
     {
         public DependencySource SupportedSource => DependencySource.DirectUrl;

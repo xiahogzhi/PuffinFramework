@@ -9,6 +9,9 @@ using Debug = UnityEngine.Debug;
 
 namespace Puffin.Editor.Environment.Core
 {
+    /// <summary>
+    /// 压缩包解压工具，支持 ZIP 和 7z 格式
+    /// </summary>
     public static class Extractor
     {
         private static readonly string[] SevenZipPaths =

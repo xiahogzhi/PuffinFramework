@@ -6,6 +6,9 @@ using L = Puffin.Editor.Localization.EditorLocalization;
 
 namespace Puffin.Editor.Core
 {
+    /// <summary>
+    /// LogSettings 的自定义编辑器，提供本地化的日志配置界面
+    /// </summary>
     [CustomEditor(typeof(LogSettings))]
     public class LogSettingsEditor : UnityEditor.Editor
     {

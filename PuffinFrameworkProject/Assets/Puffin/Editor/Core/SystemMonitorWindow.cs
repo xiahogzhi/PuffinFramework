@@ -8,6 +8,9 @@ using L = Puffin.Editor.Localization.EditorLocalization;
 
 namespace Puffin.Editor.Core
 {
+    /// <summary>
+    /// 系统监控窗口，实时显示所有游戏系统的运行状态和性能数据
+    /// </summary>
     public class SystemMonitorWindow : EditorWindow
     {
         private Vector2 _scrollPos;

@@ -9,8 +9,14 @@ using UnityEngine;
 
 namespace Puffin.Editor.Environment.Core
 {
+    /// <summary>
+    /// 下载任务状态
+    /// </summary>
     public enum TaskState { Downloading, Downloaded, Installing, Completed, Failed, Cancelled }
 
+    /// <summary>
+    /// 下载服务，管理依赖包的下载和安装队列
+    /// </summary>
     [InitializeOnLoad]
     public static class DownloadService
     {

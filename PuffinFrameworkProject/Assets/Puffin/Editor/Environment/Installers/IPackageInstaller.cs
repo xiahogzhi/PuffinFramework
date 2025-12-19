@@ -5,6 +5,9 @@ using Puffin.Editor.Environment.Core;
 
 namespace Puffin.Editor.Environment.Installers
 {
+    /// <summary>
+    /// 包安装器接口，定义不同来源依赖包的安装方法
+    /// </summary>
     public interface IPackageInstaller
     {
         DependencySource SupportedSource { get; }

@@ -10,6 +10,10 @@ using Object = UnityEngine.Object;
 
 namespace Puffin.Runtime.Tools
 {
+    /// <summary>
+    /// 默认日志记录器实现，支持颜色、标签、堆栈跟踪等功能
+    /// 基于 Unity Debug 系统实现
+    /// </summary>
     public class PuffinLogger : IPuffinLogger
     {
         private readonly StringBuilder _sb = new();

@@ -7,6 +7,9 @@ using Puffin.Editor.Environment.Core;
 
 namespace Puffin.Editor.Environment.Installers
 {
+    /// <summary>
+    /// NuGet 包安装器，从 nuget.org 下载并安装 .NET 包
+    /// </summary>
     public class NuGetInstaller : IPackageInstaller
     {
         public DependencySource SupportedSource => DependencySource.NuGet;

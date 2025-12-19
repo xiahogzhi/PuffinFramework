@@ -7,6 +7,9 @@ using UnityEngine;
 
 namespace Puffin.Editor.Environment.Core
 {
+    /// <summary>
+    /// 程序集定义文件（.asmdef）辅助工具
+    /// </summary>
     public static class AsmdefHelper
     {
         [Serializable]

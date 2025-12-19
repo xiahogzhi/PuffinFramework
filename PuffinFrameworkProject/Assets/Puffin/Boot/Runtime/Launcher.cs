@@ -18,10 +18,15 @@ using UnityEngine;
 namespace Puffin.Boot.Runtime
 {
     /// <summary>
-    /// 启动器
+    /// 框架启动器，负责初始化和启动 PuffinFramework
+    /// 在场景中放置此组件即可自动启动框架
+    /// 支持运行时自动初始化和编辑器模式下的系统初始化
     /// </summary>
     public class Launcher : MonoBehaviour
     {
+        /// <summary>
+        /// 运行时自动初始化入口，在场景加载后自动调用
+        /// </summary>
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void AutoInitializeRuntime()
         {

@@ -6,6 +6,9 @@ using L = Puffin.Editor.Localization.EditorLocalization;
 
 namespace Puffin.Editor.Core
 {
+    /// <summary>
+    /// PuffinSettings 的自定义编辑器，提供本地化的框架配置界面
+    /// </summary>
     [CustomEditor(typeof(PuffinSettings))]
     public class PuffinettingsEditor : UnityEditor.Editor
     {

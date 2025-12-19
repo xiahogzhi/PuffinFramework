@@ -8,6 +8,9 @@ using UnityEngine;
 
 namespace Puffin.Editor.Environment.Installers
 {
+    /// <summary>
+    /// GitHub 仓库安装器，从 GitHub 仓库下载源码或资源
+    /// </summary>
     public class GitHubRepoInstaller : IPackageInstaller
     {
         public DependencySource SupportedSource => DependencySource.GitHubRepo;

@@ -21,6 +21,9 @@ namespace Puffin.Editor.Core
         }
         
         
+        /// <summary>
+        /// Play 模式状态变化回调
+        /// </summary>
         private static void OnPlayModeStateChanged(PlayModeStateChange state)
         {
             // 从 Play 模式退出后重新初始化编辑器系统
@@ -28,14 +31,23 @@ namespace Puffin.Editor.Core
                 EditorApplication.delayCall += EnsureInitialized;
         }
 
+        /// <summary>
+        /// 是否已完成初始化
+        /// </summary>
         public static bool IsInitialized { get; private set; }
 
+        /// <summary>
+        /// 确保设置已初始化，如果未初始化则执行初始化
+        /// </summary>
         public static void EnsureInitialized()
         {
             if (!IsInitialized)
                 InitializeAllSettings();
         }
 
+        /// <summary>
+        /// 初始化所有 SettingsBase 派生类的实例
+        /// </summary>
         private static void InitializeAllSettings()
         {
             if (IsInitialized) return;
@@ -65,6 +77,9 @@ namespace Puffin.Editor.Core
             }
         }
 
+        /// <summary>
+        /// 检查类型是否是泛型基类的子类
+        /// </summary>
         private static bool IsSubclassOfGeneric(Type type, Type genericBase)
         {
             while (type != null && type != typeof(object))
