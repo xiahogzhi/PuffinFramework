@@ -20,7 +20,7 @@ namespace Puffin.Editor.Hub.UI
         private ModuleEditorData _data;
         private string _originalId;
         private Vector2 _scrollPos;
-        private bool _hasEditor, _hasResources;
+        private bool _hasEditor, _hasResources, _hasBootstrap;
 
         public static void Show(string modulePath, List<HubModuleInfo> availableModules, Action onSaved)
         {
@@ -55,6 +55,7 @@ namespace Puffin.Editor.Hub.UI
             _data.CurrentModuleId = _data.Manifest.moduleId;
             _hasEditor = System.IO.Directory.Exists(System.IO.Path.Combine(_modulePath, HubConstants.EditorFolder));
             _hasResources = System.IO.Directory.Exists(System.IO.Path.Combine(_modulePath, HubConstants.ResourcesFolder));
+            _hasBootstrap = System.IO.Directory.Exists(System.IO.Path.Combine(_modulePath, "Bootstrap"));
         }
 
         private void OnGUI()
@@ -129,6 +130,14 @@ namespace Puffin.Editor.Hub.UI
             else if (GUILayout.Button("添加", GUILayout.Width(60)))
                 AddDirectory("Resources");
             EditorGUILayout.EndHorizontal();
+
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.LabelField("  Bootstrap", GUILayout.Width(100));
+            if (_hasBootstrap)
+                EditorGUILayout.LabelField("✓ 已存在", EditorStyles.miniLabel);
+            else if (GUILayout.Button("添加", GUILayout.Width(60)))
+                AddDirectory("Bootstrap");
+            EditorGUILayout.EndHorizontal();
         }
 
         private void AddDirectory(string dirName)
@@ -160,10 +169,70 @@ namespace Puffin.Editor.Hub.UI
 }}";
                 System.IO.File.WriteAllText(System.IO.Path.Combine(_modulePath, "Editor", $"{moduleId}.Editor.asmdef"), asmdef);
             }
+            else if (dirName == "Bootstrap")
+            {
+                var moduleId = _data.Manifest.moduleId;
+                var asmdef = $@"{{
+    ""name"": ""{moduleId}.Bootstrap"",
+    ""references"": [
+        ""PuffinFramework.Runtime"",
+        ""PuffinFramework.Launcher"",
+        ""{moduleId}.Runtime"",
+        ""UniTask""
+    ],
+    ""includePlatforms"": [],
+    ""excludePlatforms"": [],
+    ""allowUnsafeCode"": false,
+    ""overrideReferences"": false,
+    ""precompiledReferences"": [],
+    ""autoReferenced"": true,
+    ""defineConstraints"": [],
+    ""versionDefines"": [],
+    ""noEngineReferences"": false
+}}";
+                System.IO.File.WriteAllText(System.IO.Path.Combine(_modulePath, "Bootstrap", $"{moduleId}.Bootstrap.asmdef"), asmdef);
+
+                // 创建 Bootstrap 模板类
+                var className = moduleId.Replace(".", "").Replace("-", "").Replace(" ", "");
+                var ns = moduleId.Replace("-", ".").Replace(" ", "");
+                var bootstrapCode = $@"using Cysharp.Threading.Tasks;
+using Puffin.Boot.Runtime;
+using Puffin.Runtime.Core;
+
+namespace {ns}.Bootstrap
+{{
+    /// <summary>
+    /// {moduleId} 模块启动器
+    /// </summary>
+    public class {className}Bootstrap : IBootstrap
+    {{
+        public int Priority => 0;
+        public bool SupportEditorMode => false;
+
+        public async UniTask OnPreSetup(SetupContext context)
+        {{
+            await UniTask.CompletedTask;
+        }}
+
+        public async UniTask OnPostSetup()
+        {{
+            await UniTask.CompletedTask;
+        }}
+
+        public async UniTask OnPostStart()
+        {{
+            await UniTask.CompletedTask;
+        }}
+    }}
+}}
+";
+                System.IO.File.WriteAllText(System.IO.Path.Combine(_modulePath, "Bootstrap", $"{className}Bootstrap.cs"), bootstrapCode);
+            }
 
             AssetDatabase.Refresh();
             _hasEditor = System.IO.Directory.Exists(System.IO.Path.Combine(_modulePath, HubConstants.EditorFolder));
             _hasResources = System.IO.Directory.Exists(System.IO.Path.Combine(_modulePath, HubConstants.ResourcesFolder));
+            _hasBootstrap = System.IO.Directory.Exists(System.IO.Path.Combine(_modulePath, "Bootstrap"));
         }
 
         private void SaveManifest()

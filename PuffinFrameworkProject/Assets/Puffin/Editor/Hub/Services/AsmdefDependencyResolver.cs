@@ -103,7 +103,8 @@ namespace Puffin.Editor.Hub.Services
 
             try
             {
-                CleanupMissingReferences();
+                // 暂时禁用清除引用功能，避免循环添加/删除
+                // CleanupMissingReferences();
 
                 var modulesDir = ManifestService.GetModulesPath();
                 if (!Directory.Exists(modulesDir)) return;

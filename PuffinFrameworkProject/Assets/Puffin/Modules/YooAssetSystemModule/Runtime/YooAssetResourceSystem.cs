@@ -1,4 +1,3 @@
-#if YOOASSET_INSTALLED
 using Cysharp.Threading.Tasks;
 using Puffin.Modules.ResourcesSystemInterface.Runtime;
 using Puffin.Runtime.Core.Attributes;
@@ -67,6 +66,10 @@ namespace YooAssetSystemModule.Runtime
             Debug.LogError($"Failed to load asset: {key}");
             return null;
         }
+
+        public UniTask OnInitializeAsync()
+        {
+            throw new System.NotImplementedException();
+        }
     }
 }
-#endif

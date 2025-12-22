@@ -3,7 +3,9 @@
     "rootNamespace": "",
     "references": [
         "PuffinFramework.Runtime",
-        "ResourcesSystemInterface.Runtime"
+        "ResourcesSystemInterface.Runtime",
+        "UniTask",
+        "YooAsset"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
@@ -12,12 +14,6 @@
     "precompiledReferences": [],
     "autoReferenced": true,
     "defineConstraints": [],
-    "versionDefines": [
-        {
-            "name": "com.tuyoogame.yooasset",
-            "expression": "",
-            "define": "YOOASSET_INSTALLED"
-        }
-    ],
+    "versionDefines": [],
     "noEngineReferences": false
 }

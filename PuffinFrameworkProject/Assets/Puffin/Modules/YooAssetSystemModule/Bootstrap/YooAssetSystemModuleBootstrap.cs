@@ -1,4 +1,3 @@
-#if YOOASSET_INSTALLED
 using Cysharp.Threading.Tasks;
 using Puffin.Boot.Runtime;
 using Puffin.Runtime.Core;
@@ -45,26 +44,26 @@ namespace YooAssetSystemModule.Bootstrap
 
             InitializationOperation initOperation = null;
 
-            switch (settings.playMode)
-            {
-                case EPlayMode.EditorSimulateMode:
-                    var editorParams = new EditorSimulateModeParameters();
-                    editorParams.SimulateManifestFilePath = EditorSimulateModeHelper.SimulateBuild(settings.defaultPackageName);
-                    initOperation = package.InitializeAsync(editorParams);
-                    break;
-
-                case EPlayMode.OfflinePlayMode:
-                    var offlineParams = new OfflinePlayModeParameters();
-                    initOperation = package.InitializeAsync(offlineParams);
-                    break;
-
-                case EPlayMode.HostPlayMode:
-                    var hostParams = new HostPlayModeParameters();
-                    hostParams.BuildinQueryServices = new GameQueryServices();
-                    hostParams.RemoteServices = new RemoteServices(settings.hostServerURL, settings.fallbackHostServerURL);
-                    initOperation = package.InitializeAsync(hostParams);
-                    break;
-            }
+            // switch (settings.playMode)
+            // {
+            //     case EPlayMode.EditorSimulateMode:
+            //         var editorParams = new EditorSimulateModeParameters();
+            //         editorParams.SimulateManifestFilePath = EditorSimulateModeHelper.SimulateBuild(settings.defaultPackageName);
+            //         initOperation = package.InitializeAsync(editorParams);
+            //         break;
+            //
+            //     case EPlayMode.OfflinePlayMode:
+            //         var offlineParams = new OfflinePlayModeParameters();
+            //         initOperation = package.InitializeAsync(offlineParams);
+            //         break;
+            //
+            //     case EPlayMode.HostPlayMode:
+            //         var hostParams = new HostPlayModeParameters();
+            //         hostParams.BuildinQueryServices = new GameQueryServices();
+            //         hostParams.RemoteServices = new RemoteServices(settings.hostServerURL, settings.fallbackHostServerURL);
+            //         initOperation = package.InitializeAsync(hostParams);
+            //         break;
+            // }
 
             await initOperation.ToUniTask();
 
@@ -86,13 +85,13 @@ namespace YooAssetSystemModule.Bootstrap
             await UniTask.CompletedTask;
         }
 
-        private class GameQueryServices : IBuildinQueryServices
-        {
-            public bool Query(string packageName, string fileName, string fileCRC)
-            {
-                return false;
-            }
-        }
+        // private class GameQueryServices : IBuildinQueryServices
+        // {
+        //     public bool Query(string packageName, string fileName, string fileCRC)
+        //     {
+        //         return false;
+        //     }
+        // }
 
         private class RemoteServices : IRemoteServices
         {
@@ -117,4 +116,3 @@ namespace YooAssetSystemModule.Bootstrap
         }
     }
 }
-#endif

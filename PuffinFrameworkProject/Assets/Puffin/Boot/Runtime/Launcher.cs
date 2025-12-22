@@ -33,16 +33,24 @@ namespace Puffin.Boot.Runtime
             var launcher = FindAnyObjectByType<Launcher>();
             if (launcher != null)
             {
-                launcher.Setup();
-
-                var settings = PuffinSettings.Instance;
-                if (settings != null && settings.autoInitialize)
-                {
-                    launcher.StartAsync();
-                }
+                launcher.InitializeAsync().Forget();
             }
             else
                 throw new Exception("Could not find launcher!");
+        }
+
+        /// <summary>
+        /// 完整的异步初始化流程
+        /// </summary>
+        private async UniTaskVoid InitializeAsync()
+        {
+            await SetupAsync();
+
+            var settings = PuffinSettings.Instance;
+            if (settings != null && settings.autoInitialize)
+            {
+                await StartAsync();
+            }
         }
 
 #if UNITY_EDITOR

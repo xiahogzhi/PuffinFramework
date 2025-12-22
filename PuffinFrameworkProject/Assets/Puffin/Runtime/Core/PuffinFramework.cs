@@ -6,7 +6,9 @@ using Puffin.Runtime.Events.Core;
 using Puffin.Runtime.Interfaces;
 using Puffin.Runtime.Settings;
 using Puffin.Runtime.Tools;
+#if UNITY_EDITOR
 using UnityEditor;
+#endif
 using UnityEngine;
 using Application = UnityEngine.Application;
 

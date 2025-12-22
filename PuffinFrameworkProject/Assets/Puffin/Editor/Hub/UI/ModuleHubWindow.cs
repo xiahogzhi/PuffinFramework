@@ -688,16 +688,6 @@ namespace Puffin.Editor.Hub.UI
                                 // 导出
                                 if (GUILayout.Button("📦", GUILayout.Width(22), GUILayout.Height(18)))
                                     ExportPackage(_selectedModule);
-                                // 创建 Bootstrap 目录
-                                if (GUILayout.Button("🚀", GUILayout.Width(22), GUILayout.Height(18)))
-                                {
-                                    if (EditorUtility.DisplayDialog("创建 Bootstrap 目录",
-                                        $"是否为模块 {_selectedModule.ModuleId} 创建 Bootstrap 目录？\n\n将会创建：\n- Bootstrap/ 目录\n- Bootstrap/README.md\n- Bootstrap/{_selectedModule.ModuleId}Bootstrap.cs",
-                                        "创建", "取消"))
-                                    {
-                                        CreateBootstrapDirectory(_selectedModule);
-                                    }
-                                }
                             }
                         }
                         EditorGUILayout.EndHorizontal();
@@ -1829,71 +1819,6 @@ namespace Puffin.Editor.Hub.UI
             if (!string.IsNullOrEmpty(a.version) && !string.IsNullOrEmpty(b.version) && a.version != b.version) return true;
             if (!string.IsNullOrEmpty(a.url) && !string.IsNullOrEmpty(b.url) && a.url != b.url) return true;
             return false;
-        }
-
-        /// <summary>
-        /// 创建 Bootstrap 目录
-        /// </summary>
-        private void CreateBootstrapDirectory(HubModuleInfo module)
-        {
-            var modulePath = System.IO.Path.Combine(Application.dataPath, $"Puffin/Modules/{module.ModuleId}");
-            var bootstrapPath = System.IO.Path.Combine(modulePath, "Bootstrap");
-
-            // 检查目录是否已存在
-            if (System.IO.Directory.Exists(bootstrapPath))
-            {
-                EditorUtility.DisplayDialog("目录已存在", $"Bootstrap 目录已存在：\n{bootstrapPath}", "确定");
-                return;
-            }
-
-            try
-            {
-                // 创建 Bootstrap 目录
-                System.IO.Directory.CreateDirectory(bootstrapPath);
-
-                // 复制 README.md
-                var readmeTemplatePath = System.IO.Path.Combine(Application.dataPath, "Puffin/Editor/Hub/Templates/Bootstrap/README.md");
-                var readmePath = System.IO.Path.Combine(bootstrapPath, "README.md");
-                if (System.IO.File.Exists(readmeTemplatePath))
-                {
-                    System.IO.File.Copy(readmeTemplatePath, readmePath);
-                }
-
-                // 创建 Bootstrap 类文件
-                var templatePath = System.IO.Path.Combine(Application.dataPath, "Puffin/Editor/Hub/Templates/Bootstrap/BootstrapTemplate.cs.txt");
-                var bootstrapFilePath = System.IO.Path.Combine(bootstrapPath, $"{module.ModuleId}Bootstrap.cs");
-
-                if (System.IO.File.Exists(templatePath))
-                {
-                    var template = System.IO.File.ReadAllText(templatePath);
-                    // 替换占位符
-                    var content = template
-                        .Replace("#NAMESPACE#", module.ModuleId)
-                        .Replace("#MODULE_NAME#", module.ModuleId);
-                    System.IO.File.WriteAllText(bootstrapFilePath, content);
-                }
-
-                // 刷新 AssetDatabase
-                AssetDatabase.Refresh();
-
-                EditorUtility.DisplayDialog("创建成功",
-                    $"Bootstrap 目录创建成功！\n\n已创建：\n- {bootstrapPath}\n- README.md\n- {module.ModuleId}Bootstrap.cs",
-                    "确定");
-
-                // 定位到创建的目录
-                var assetPath = $"Assets/Puffin/Modules/{module.ModuleId}/Bootstrap";
-                var obj = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(assetPath);
-                if (obj != null)
-                {
-                    Selection.activeObject = obj;
-                    EditorGUIUtility.PingObject(obj);
-                }
-            }
-            catch (System.Exception e)
-            {
-                EditorUtility.DisplayDialog("创建失败", $"创建 Bootstrap 目录失败：\n{e.Message}", "确定");
-                Debug.LogError($"创建 Bootstrap 目录失败：{e}");
-            }
         }
 
         /// <summary>

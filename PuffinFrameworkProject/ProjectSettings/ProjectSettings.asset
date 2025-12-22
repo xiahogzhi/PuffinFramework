@@ -165,7 +165,8 @@ PlayerSettings:
   androidSupportedAspectRatio: 1
   androidMaxAspectRatio: 2.4
   androidMinAspectRatio: 1
-  applicationIdentifier: {}
+  applicationIdentifier:
+    Android: com.DefaultCompany.PuffinFrameworkProject
   buildNumber:
     Standalone: 0
     VisionOS: 0
@@ -409,7 +410,10 @@ PlayerSettings:
   m_BuildTargetGroupLightmapSettings: []
   m_BuildTargetGroupLoadStoreDebugModeSettings: []
   m_BuildTargetNormalMapEncoding: []
-  m_BuildTargetDefaultTextureCompressionFormat: []
+  m_BuildTargetDefaultTextureCompressionFormat:
+  - serializedVersion: 3
+    m_BuildTarget: Android
+    m_Formats: 01000000
   playModeTestRunnerEnabled: 0
   runPlayModeTestAsEditModeTest: 0
   actionOnDotNetUnhandledException: 1
@@ -676,7 +680,7 @@ PlayerSettings:
   webWasm2023: 0
   webEnableSubmoduleStrippingCompatibility: 0
   scriptingDefineSymbols:
-    Android: DOTWEEN
+    Android: COM_TUYOOGAME_YOOASSET_INSTALLED;COM_UNITY_SCRIPTABLEBUILDPIPELINE_INSTALLED;DOTWEEN;LUBANTEMPLATE_INSTALLED;LUBANTOOL_INSTALLED;SIMPLEJSON_INSTALLED;ODIN_INSPECTOR;ODIN_INSPECTOR_3;ODIN_INSPECTOR_3_1;ODIN_INSPECTOR_3_2;ODIN_INSPECTOR_3_3
     EmbeddedLinux: DOTWEEN
     GameCoreScarlett: DOTWEEN
     GameCoreXboxOne: DOTWEEN
@@ -687,7 +691,7 @@ PlayerSettings:
     PS4: DOTWEEN
     PS5: DOTWEEN
     QNX: DOTWEEN
-    Standalone: ODIN_INSPECTOR;ODIN_INSPECTOR_3;ODIN_INSPECTOR_3_1;ODIN_INSPECTOR_3_2;ODIN_INSPECTOR_3_3;DOTWEEN
+    Standalone: COM_TUYOOGAME_YOOASSET_INSTALLED;COM_UNITY_SCRIPTABLEBUILDPIPELINE_INSTALLED;DOTWEEN;LUBANTEMPLATE_INSTALLED;LUBANTOOL_INSTALLED;ODIN_INSPECTOR;ODIN_INSPECTOR_3;ODIN_INSPECTOR_3_1;ODIN_INSPECTOR_3_2;ODIN_INSPECTOR_3_3;SIMPLEJSON_INSTALLED
     VisionOS: DOTWEEN
     WebGL: DOTWEEN
     Windows Store Apps: DOTWEEN

@@ -1,4 +1,3 @@
-#if YOOASSET_INSTALLED
 using Puffin.Runtime.Settings;
 using UnityEngine;
 using YooAsset;
@@ -32,10 +31,5 @@ namespace YooAssetSystemModule.Runtime
 
         [Tooltip("失败重试最大次数")]
         public int failedTryAgain = 3;
-
-        [Header("缓存配置")]
-        [Tooltip("验证级别：Low-快速验证 High-完整验证")]
-        public EVerifyLevel verifyLevel = EVerifyLevel.Middle;
     }
 }
-#endif

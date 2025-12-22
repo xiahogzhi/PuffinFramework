@@ -29,7 +29,7 @@ namespace Puffin.Runtime.Settings
         /// </summary>
         public static string GetResourcePath()
         {
-            var attr = (SettingsPathAttribute) Attribute.GetCustomAttribute(typeof(T), typeof(SettingsPathAttribute));
+            var attr = (SettingsPathAttribute)Attribute.GetCustomAttribute(typeof(T), typeof(SettingsPathAttribute));
             return attr?.Path ?? typeof(T).Name;
         }
 
@@ -60,13 +60,24 @@ namespace Puffin.Runtime.Settings
                 }
 #else
                 if (!PuffinFramework.IsSetup) throw new Exception("PuffinFramework is not setup");
-                if (_instance == null)
-                {
-                    var path = GetResourcePath();
-                    _instance = PuffinFramework.ResourcesLoader.Load<T>(path);
-                }
+                var c = CreateInstance<T>();
+                c.LoadSetting();
+                Destroy(c);
 #endif
                 return _instance;
+            }
+        }
+
+        /// <summary>
+        /// 加载配置
+        /// </summary>
+        /// <returns></returns>
+        protected virtual void LoadSetting()
+        {
+            if (_instance == null)
+            {
+                var path = GetResourcePath();
+                _instance = PuffinFramework.ResourcesLoader.Load<T>(path);
             }
         }
 
@@ -104,10 +115,12 @@ namespace Puffin.Runtime.Settings
                             if (!string.IsNullOrEmpty(moduleRoot))
                                 return $"{moduleRoot}/Resources";
                         }
+
                         dir = Path.GetDirectoryName(dir)?.Replace("\\", "/");
                     }
                 }
             }
+
             // 默认回退到框架 Resources 目录
             return "Assets/Puffin/Resources";
         }
