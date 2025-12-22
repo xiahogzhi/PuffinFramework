@@ -7,7 +7,20 @@
   "tags": [],
   "unityVersion": "",
   "puffinVersion": "",
-  "moduleDependencies": [],
+  "moduleDependencies": [
+    {
+      "moduleId": "ConfigSystemInterface",
+      "version": null,
+      "registryId": "local",
+      "optional": false
+    },
+    {
+      "moduleId": "ResourcesSystemInterface",
+      "version": null,
+      "registryId": "local",
+      "optional": false
+    }
+  ],
   "envDependencies": [
     {
       "id": "LubanTool",

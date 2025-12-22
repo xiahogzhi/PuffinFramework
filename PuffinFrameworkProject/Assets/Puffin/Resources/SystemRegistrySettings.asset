@@ -12,5 +12,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 37179a66768ab414c9660d466d43a972, type: 3}
   m_Name: SystemRegistrySettings
   m_EditorClassIdentifier: PuffinFramework.Runtime::Puffin.Runtime.Settings.SystemRegistrySettings
-  systems: []
+  systems:
+  - typeName: Puffin.Modules.LubanConfigModule.Runtime.ConfigSystem
+    displayName: ConfigSystem
+    enabled: 1
+    priority: 0
+    alias: 
+    dependencies: []
+  - typeName: Puffin.Modules.TimerModule.Runtime.TimerSystem
+    displayName: TimerSystem
+    enabled: 1
+    priority: 0
+    alias: 
+    dependencies: []
   interfaceSelections: []

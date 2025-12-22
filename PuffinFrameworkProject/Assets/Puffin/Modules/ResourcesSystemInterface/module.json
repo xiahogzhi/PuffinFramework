@@ -1,0 +1,21 @@
+{
+  "moduleId": "ResourcesSystemInterface",
+  "displayName": "接口-资源系统",
+  "version": "1.0.0",
+  "author": "InputName",
+  "description": "一个通用的资源系统接口，用来访问游戏资源",
+  "tags": [],
+  "unityVersion": "",
+  "puffinVersion": "",
+  "moduleDependencies": [],
+  "envDependencies": null,
+  "references": {
+    "moduleReferences": [],
+    "references": "UniTask.asmdef"
+  },
+  "downloadUrl": "",
+  "checksum": "",
+  "size": 0,
+  "releaseNotes": "",
+  "publishedAt": ""
+}

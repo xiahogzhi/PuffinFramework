@@ -1,0 +1,62 @@
+using Cysharp.Threading.Tasks;
+using Puffin.Boot.Runtime;
+using Puffin.Runtime.Core;
+
+namespace #NAMESPACE#.Bootstrap
+{
+    /// <summary>
+    /// #MODULE_NAME# 模块启动器
+    /// </summary>
+    public class #MODULE_NAME#Bootstrap : IBootstrap
+    {
+        /// <summary>
+        /// 优先级（数值越小越先执行）
+        /// -1000: 资源系统配置
+        /// -500: 热更新系统
+        /// 0: 普通模块（默认）
+        /// 1000: 后处理
+        /// </summary>
+        public int Priority => 0;
+
+        /// <summary>
+        /// 是否在编辑器模式下执行（默认 false）
+        /// 设置为 true 时，Bootstrap 会在编辑器模式下也执行
+        /// </summary>
+        public bool SupportEditorMode => false;
+
+        /// <summary>
+        /// 在 Setup 之前执行，用于配置 SetupContext
+        /// </summary>
+        public async UniTask OnPreSetup(SetupContext context)
+        {
+            // TODO: 配置资源加载器、日志系统等
+            // context.ResourcesLoader = new YourResourceLoader();
+            // context.Logger = new YourLogger();
+
+            await UniTask.CompletedTask;
+        }
+
+        /// <summary>
+        /// 在 Setup 之后、Start 之前执行
+        /// </summary>
+        public async UniTask OnPostSetup()
+        {
+            // TODO: 执行热更新检查、预加载资源等
+            // await CheckHotUpdate();
+            // await PreloadAssets();
+
+            await UniTask.CompletedTask;
+        }
+
+        /// <summary>
+        /// 在框架 Start 之后执行
+        /// </summary>
+        public async UniTask OnPostStart()
+        {
+            // TODO: 加载首个场景、显示主界面等
+            // await LoadFirstScene();
+
+            await UniTask.CompletedTask;
+        }
+    }
+}

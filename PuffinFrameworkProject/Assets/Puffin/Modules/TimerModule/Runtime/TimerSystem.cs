@@ -10,7 +10,7 @@ namespace Puffin.Modules.TimerModule.Runtime
     /// <para>优先级设为 -100，确保在其他系统之前更新</para>
     /// </summary>
     [AutoRegister]
-    public class TimerSystem : IGameSystem, IUpdate
+    public class TimerSystem : IGameSystem, ISystemUpdate
     {
         /// <summary>系统优先级，越低越先执行</summary>
         public int priority => -100;

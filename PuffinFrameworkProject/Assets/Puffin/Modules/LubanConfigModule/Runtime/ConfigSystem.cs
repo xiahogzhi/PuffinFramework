@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
 using Cysharp.Threading.Tasks;
+using Puffin.Modules.ConfigSystemInterface.Runtime;
 using Puffin.Runtime.Core;
 using Puffin.Runtime.Core.Attributes;
 using Puffin.Runtime.Interfaces.SystemEvents;
@@ -14,12 +16,12 @@ namespace Puffin.Modules.LubanConfigModule.Runtime
     /// 配置系统实现
     /// </summary>
     [AutoRegister]
-    public class ConfigSystem : IConfigSystem, IInitializeAsync, IEditorSupport
+    public class ConfigSystem : IConfigSystem ,ISystemInitialize, ISystemEditorSupport
     {
         private readonly Dictionary<Type, object> _tables = new();
         private readonly Dictionary<string, object> _tablesByName = new();
+        private bool _isLoaded;
 
-        public bool IsLoaded { get; private set; }
 
         public async UniTask OnInitializeAsync() => await LoadAsync();
 
@@ -27,12 +29,15 @@ namespace Puffin.Modules.LubanConfigModule.Runtime
 
         public async UniTask ReloadAsync()
         {
-            IsLoaded = false;
+            _isLoaded = false;
             await LoadAsync();
         }
 
         private async UniTask LoadAsync()
         {
+            if (_isLoaded)
+                throw new Exception("当前配置已经加载!"); 
+            
             try
             {
                 _tables.Clear();
@@ -42,7 +47,7 @@ namespace Puffin.Modules.LubanConfigModule.Runtime
                 if (loaderType == null)
                 {
                     Debug.LogWarning("[ConfigSystem] 未找到 ConfigLoader，请先生成配置");
-                    IsLoaded = false;
+                    _isLoaded = false;
                     await UniTask.Yield();
                     return;
                 }
@@ -52,7 +57,7 @@ namespace Puffin.Modules.LubanConfigModule.Runtime
                 if (tablesType == null || createMethod == null)
                 {
                     Debug.LogWarning("[ConfigSystem] ConfigLoader 无效");
-                    IsLoaded = false;
+                    _isLoaded = false;
                     await UniTask.Yield();
                     return;
                 }
@@ -72,7 +77,7 @@ namespace Puffin.Modules.LubanConfigModule.Runtime
                     _tablesByName[prop.Name] = table;
                 }
 
-                IsLoaded = true;
+                _isLoaded = true;
                 Debug.Log($"[ConfigSystem] 配置加载完成，共 {_tables.Count} 张表");
             }
             catch (Exception e)
@@ -135,6 +140,28 @@ namespace Puffin.Modules.LubanConfigModule.Runtime
                 return indexer.GetValue(table, new[] { id });
 
             return null;
+        }
+
+        bool IConfigSystem.IsLoaded => _isLoaded;
+
+        IConfig IConfigSystem.GetConfig(Type type,object key)
+        {
+            return GetById(type, key) as IConfig;
+        }
+
+        T IConfigSystem.GetConfig<T>(object key)
+        {
+            throw new NotImplementedException();
+        }
+
+        T[] IConfigSystem.GetConfigs<T>(object key)
+        {
+            throw new NotImplementedException();
+        }
+
+        void IConfigSystem.Reload()
+        {
+            throw new NotImplementedException();
         }
     }
 }

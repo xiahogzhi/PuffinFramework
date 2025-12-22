@@ -1,0 +1,21 @@
+{
+    "moduleId": "InputSystemModule",
+    "displayName": "输入模块",
+    "version": "1.0.0",
+    "author": "InputName",
+    "description": "一个通用输入模块,将Unity InpytSystem进行封装,主要通过事件进行监听,自定义按键绑定，可以自定义玩家",
+    "tags": [],
+    "unityVersion": "",
+    "puffinVersion": "",
+    "moduleDependencies": [],
+    "envDependencies": [],
+    "references": {
+        "moduleReferences": [],
+        "references": ""
+    },
+    "downloadUrl": "",
+    "checksum": "",
+    "size": 0,
+    "releaseNotes": "",
+    "publishedAt": ""
+}

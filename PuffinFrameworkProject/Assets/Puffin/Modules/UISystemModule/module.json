@@ -13,6 +13,12 @@
       "version": "",
       "registryId": "official",
       "optional": false
+    },
+    {
+      "moduleId": "ResourcesSystemInterface",
+      "version": null,
+      "registryId": "local",
+      "optional": false
     }
   ],
   "envDependencies": null,

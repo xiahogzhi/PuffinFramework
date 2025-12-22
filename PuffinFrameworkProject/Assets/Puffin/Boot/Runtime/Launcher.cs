@@ -90,15 +90,45 @@ namespace Puffin.Boot.Runtime
             {
                 await UniTask.Yield();
 
+                var logger = new PuffinLogger();
                 var settings = PuffinSettings.Instance;
                 var scannerConfig = settings.ToScannerConfig();
                 var runtimeConfig = settings.ToRuntimeConfig();
 
                 // 创建编辑器专用 Runtime
                 var context = new SetupContext();
-                context.Logger = new PuffinLogger();
+                context.Logger = logger;
                 context.ScannerConfig = scannerConfig;
                 context.runtimeConfig = runtimeConfig;
+
+                // 执行 Bootstrap PreSetup 阶段（仅支持编辑器模式的 Bootstrap）
+                var launcherSetting = LauncherSetting.Instance;
+                if (launcherSetting != null && launcherSetting.enableBootstrap)
+                {
+                    var scanner = new BootstrapScanner(logger, launcherSetting);
+                    var allBootstraps = scanner.ScanAndCreate();
+                    var editorBootstraps = allBootstraps.Where(b => b.SupportEditorMode).ToList();
+
+                    if (editorBootstraps.Count > 0)
+                    {
+                        if (launcherSetting.showBootstrapLogs)
+                            logger.Info($"[Bootstrap] 编辑器模式：开始执行 PreSetup 阶段，共 {editorBootstraps.Count} 个启动器");
+
+                        foreach (var bootstrap in editorBootstraps)
+                        {
+                            try
+                            {
+                                await bootstrap.OnPreSetup(context);
+                                if (launcherSetting.showBootstrapLogs)
+                                    logger.Info($"[Bootstrap] {bootstrap.GetType().Name}.OnPreSetup 完成");
+                            }
+                            catch (Exception e)
+                            {
+                                logger.Error($"[Bootstrap] {bootstrap.GetType().Name}.OnPreSetup 失败:\n{e}");
+                            }
+                        }
+                    }
+                }
 
                 _editorRuntime = new GameSystemRuntime(context.Logger);
                 _editorRuntime.IsEditorMode = true;
@@ -122,7 +152,7 @@ namespace Puffin.Boot.Runtime
                 // 调用编辑器初始化
                 foreach (var system in _editorRuntime.GetAllSystems())
                 {
-                    if (system is IEditorSupport editorSupport)
+                    if (system is ISystemEditorSupport editorSupport)
                     {
                         try
                         {
@@ -172,7 +202,7 @@ namespace Puffin.Boot.Runtime
 
                 // 调用编辑器初始化
                 var system = _editorRuntime.GetAllSystems().FirstOrDefault(s => s.GetType() == type);
-                if (system is IEditorSupport editorSupport)
+                if (system is ISystemEditorSupport editorSupport)
                 {
                     try
                     {
@@ -229,7 +259,7 @@ namespace Puffin.Boot.Runtime
                 return false;
             if (type.IsAbstract || type.IsInterface)
                 return false;
-            if (!typeof(IEditorSupport).IsAssignableFrom(type))
+            if (!typeof(ISystemEditorSupport).IsAssignableFrom(type))
                 return false;
 
             if (config.RequireAutoRegister && type.GetCustomAttribute<AutoRegisterAttribute>() == null)
@@ -247,22 +277,110 @@ namespace Puffin.Boot.Runtime
         /// <summary>
         /// 安装环境
         /// </summary>
-        public virtual void Setup()
+        public virtual async void Setup()
         {
-            SetupContext context = new SetupContext();
-            context.Logger = new PuffinLogger();
-            context.ResourcesLoader = new DefaultResourceLoader();
-            PuffinFramework.Setup(context);
+            await SetupAsync();
         }
+
+        /// <summary>
+        /// 异步安装环境，支持 Bootstrap 扩展
+        /// </summary>
+        protected virtual async UniTask SetupAsync()
+        {
+            var logger = new PuffinLogger();
+            var setting = LauncherSetting.Instance;
+
+            // 创建 SetupContext
+            SetupContext context = new SetupContext();
+            context.Logger = logger;
+            context.ResourcesLoader = new DefaultResourcesLoader();
+
+            // 执行 Bootstrap PreSetup 阶段
+            if (setting != null && setting.enableBootstrap)
+            {
+                var scanner = new BootstrapScanner(logger, setting);
+                var bootstraps = scanner.ScanAndCreate();
+
+                if (bootstraps.Count > 0)
+                {
+                    if (setting.showBootstrapLogs)
+                        logger.Info($"[Bootstrap] 开始执行 PreSetup 阶段，共 {bootstraps.Count} 个启动器");
+
+                    foreach (var bootstrap in bootstraps)
+                    {
+                        try
+                        {
+                            await bootstrap.OnPreSetup(context);
+                            if (setting.showBootstrapLogs)
+                                logger.Info($"[Bootstrap] {bootstrap.GetType().Name}.OnPreSetup 完成");
+                        }
+                        catch (Exception e)
+                        {
+                            logger.Error($"[Bootstrap] {bootstrap.GetType().Name}.OnPreSetup 失败:\n{e}");
+                        }
+                    }
+
+                    // 保存 bootstraps 供后续阶段使用
+                    _bootstraps = bootstraps;
+                }
+            }
+
+            // 执行框架 Setup
+            PuffinFramework.Setup(context);
+
+            // 执行 Bootstrap PostSetup 阶段
+            if (_bootstraps != null && _bootstraps.Count > 0)
+            {
+                if (setting.showBootstrapLogs)
+                    logger.Info($"[Bootstrap] 开始执行 PostSetup 阶段");
+
+                foreach (var bootstrap in _bootstraps)
+                {
+                    try
+                    {
+                        await bootstrap.OnPostSetup();
+                        if (setting.showBootstrapLogs)
+                            logger.Info($"[Bootstrap] {bootstrap.GetType().Name}.OnPostSetup 完成");
+                    }
+                    catch (Exception e)
+                    {
+                        logger.Error($"[Bootstrap] {bootstrap.GetType().Name}.OnPostSetup 失败:\n{e}");
+                    }
+                }
+            }
+        }
+
+        private List<IBootstrap> _bootstraps;
 
         /// <summary>
         /// 启动框架,自动在运行开始的时候调用
         /// </summary>
         /// <returns></returns>
-        public virtual UniTask StartAsync()
+        public virtual async UniTask StartAsync()
         {
             PuffinFramework.Start();
-            return UniTask.CompletedTask;
+
+            // 执行 Bootstrap PostStart 阶段
+            if (_bootstraps != null && _bootstraps.Count > 0)
+            {
+                var setting = LauncherSetting.Instance;
+                if (setting.showBootstrapLogs)
+                    PuffinFramework.Logger.Info($"[Bootstrap] 开始执行 PostStart 阶段");
+
+                foreach (var bootstrap in _bootstraps)
+                {
+                    try
+                    {
+                        await bootstrap.OnPostStart();
+                        if (setting.showBootstrapLogs)
+                            PuffinFramework.Logger.Info($"[Bootstrap] {bootstrap.GetType().Name}.OnPostStart 完成");
+                    }
+                    catch (Exception e)
+                    {
+                        PuffinFramework.Logger.Error($"[Bootstrap] {bootstrap.GetType().Name}.OnPostStart 失败:\n{e}");
+                    }
+                }
+            }
         }
     }
 }

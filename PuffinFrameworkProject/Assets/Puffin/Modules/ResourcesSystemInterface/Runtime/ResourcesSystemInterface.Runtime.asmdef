@@ -1,0 +1,16 @@
+{
+    "name": "ResourcesSystemInterface.Runtime",
+    "rootNamespace": "",
+    "references": [
+        "PuffinFramework.Runtime",
+        "UniTask"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "noEngineReferences": false
+}

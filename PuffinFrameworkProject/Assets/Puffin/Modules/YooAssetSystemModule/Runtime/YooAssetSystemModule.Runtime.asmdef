@@ -1,0 +1,23 @@
+{
+    "name": "YooAssetSystemModule.Runtime",
+    "rootNamespace": "",
+    "references": [
+        "PuffinFramework.Runtime",
+        "ResourcesSystemInterface.Runtime"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [
+        {
+            "name": "com.tuyoogame.yooasset",
+            "expression": "",
+            "define": "YOOASSET_INSTALLED"
+        }
+    ],
+    "noEngineReferences": false
+}

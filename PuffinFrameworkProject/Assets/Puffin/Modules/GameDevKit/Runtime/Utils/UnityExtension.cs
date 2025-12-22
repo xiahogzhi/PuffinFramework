@@ -23,6 +23,12 @@ namespace XFrameworks.Runtime.Core
             return LoadAsset<GameObject>(path);
         }
 
+        /// <summary>
+        /// 使用框架ResourcesLoader资源加载器进行加载资源
+        /// </summary>
+        /// <param name="path"></param>
+        /// <typeparam name="T"></typeparam>
+        /// <returns></returns>
         public static T LoadAsset<T>(this string path) where T : Object
         {
             return PuffinFramework.ResourcesLoader.Load<T>(path);

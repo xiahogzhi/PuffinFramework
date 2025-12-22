@@ -4,6 +4,7 @@
     "references": [
         "PuffinFramework.Runtime",
         "GameDevKit.Runtime",
+        "ResourcesSystemInterface.Runtime",
         "UniTask",
         "UnityEngine.UI"
     ],

@@ -11,7 +11,11 @@ Assets/Puffin/
 ├── Boot/                          # 启动模块
 │   └── Runtime/
 │       ├── Launcher.cs            # 框架启动器（入口点）
-│       └── LauncherSetting.cs     # 启动配置
+│       ├── LauncherSetting.cs     # 启动配置
+│       ├── IBootstrap.cs          # Bootstrap 接口
+│       ├── BootstrapScanner.cs    # Bootstrap 扫描器
+│       ├── CustomResourceBootstrap.cs  # 示例 Bootstrap
+│       └── BOOTSTRAP.md           # Bootstrap 使用文档
 │
 ├── Editor/                        # 编辑器工具
 │   ├── Core/                      # 核心编辑器功能
@@ -88,6 +92,7 @@ Assets/Puffin/
     │   ├── Attributes/
     │   │   ├── AutoRegisterAttribute.cs     # 自动注册
     │   │   ├── ConditionalSystemAttribute.cs # 条件系统
+    │   │   ├── DefaultAttribute.cs          # 默认系统标记
     │   │   ├── DependsOnAttribute.cs        # 依赖声明
     │   │   ├── InjectAttribute.cs           # 依赖注入
     │   │   ├── SystemAliasAttribute.cs      # 系统别名
@@ -199,6 +204,60 @@ Assets/Puffin/
 - 运行时自动初始化 (`[RuntimeInitializeOnLoadMethod]`)
 - 编辑器模式支持 (`[InitializeOnLoadMethod]`)
 - 支持 `IEditorSupport` 系统在编辑器中运行
+- 支持 Bootstrap 扩展系统（无需修改核心代码）
+
+### 6. Bootstrap 系统（启动器扩展）
+**路径**: `Assets/Puffin/Boot/Runtime/`
+
+允许模块在启动流程的不同阶段注入自定义逻辑：
+
+**启动流程**：
+```
+Launcher.Setup()
+  ↓
+扫描 IBootstrap 实现
+  ↓
+OnPreSetup() - 配置 SetupContext（资源系统、日志等）
+  ↓
+PuffinFramework.Setup()
+  ↓
+OnPostSetup() - Setup 后处理（热更新、预加载等）
+  ↓
+Launcher.StartAsync()
+  ↓
+PuffinFramework.Start()
+  ↓
+OnPostStart() - 启动后处理（加载场景等）
+```
+
+**使用示例**：
+```csharp
+public class MyBootstrap : IBootstrap
+{
+    public int Priority => -1000; // 优先级
+
+    public async UniTask OnPreSetup(SetupContext context)
+    {
+        // 替换资源加载器
+        context.ResourcesLoader = new MyResourceLoader();
+    }
+
+    public async UniTask OnPostSetup()
+    {
+        // 热更新检查
+        await CheckHotUpdate();
+    }
+
+    public async UniTask OnPostStart()
+    {
+        // 加载首个场景
+        await LoadFirstScene();
+    }
+}
+```
+
+**详细文档**: `Assets/Puffin/Boot/BOOTSTRAP.md`
+
 
 ## 程序集依赖关系
 
@@ -274,6 +333,7 @@ public class MyScript : GameScript
 | 特性 | 说明 |
 |------|------|
 | `[AutoRegister]` | 自动注册系统 |
+| `[Default]` | 标记默认系统实现（无其他实现时使用） |
 | `[DependsOn(typeof(T))]` | 声明系统依赖 |
 | `[Inject]` | 依赖注入（强依赖） |
 | `[WeakInject]` | 弱依赖注入（可选） |
@@ -345,10 +405,71 @@ public class MySystem : IGameSystem, IUpdate, IRegisterEvent
 
 ### 创建新模块
 1. 在 `Assets/Puffin/Modules/` 下创建模块目录
-2. 创建 `Runtime/` 和 `Editor/` 子目录
+2. 创建标准子目录：
+   - `Runtime/` - 运行时代码
+   - `Editor/` - 编辑器代码
+   - `Bootstrap/` - 启动器（可选，用于自定义启动流程）
+   - `Resources/` - 资源文件（可选）
 3. 创建对应的 `.asmdef` 文件
 4. 创建 `module.json` 配置文件
 5. 在 `.asmdef` 中添加对 `PuffinFramework.Runtime` 的引用
+
+**Bootstrap 目录说明**：
+- Bootstrap 目录用于存放模块的启动器实现
+- 不需要单独的 `.asmdef` 文件，会被包含在模块的 Runtime 程序集中
+- 框架会自动扫描并执行所有实现 `IBootstrap` 的类
+- 可以使用模板快速创建：`Assets/Puffin/Editor/Hub/Templates/Bootstrap/`
+
+### 默认系统机制
+
+`[Default]` 特性用于标记接口的默认实现，提供开箱即用的功能，同时允许用户自定义替换。
+
+**工作原理：**
+1. **无其他实现时**：自动使用默认实现
+2. **存在其他实现时**：优先使用非默认实现，跳过默认实现
+3. **多个默认实现时**：
+   - 检查 `SystemRegistrySettings.interfaceSelections` 中的用户选择
+   - 如果未指定，使用第一个并记录警告
+
+**示例：**
+```csharp
+// 默认资源系统（基于 Unity Resources）
+[Default]
+[AutoRegister]
+public class DefaultResourceSystem : IResourcesSystem
+{
+    public T Load<T>(string key) where T : Object
+    {
+        return Resources.Load<T>(key);
+    }
+}
+
+// 用户自定义实现（会自动替换默认实现）
+[AutoRegister]
+public class AddressableResourceSystem : IResourcesSystem
+{
+    public T Load<T>(string key) where T : Object
+    {
+        // 使用 Addressables 加载
+    }
+}
+```
+
+**配置多个默认实现：**
+
+如果有多个默认实现，在 `SystemRegistrySettings` 中配置：
+```csharp
+// 在 SystemRegistrySettings.interfaceSelections 中添加：
+{
+    interfaceTypeName = "Puffin.Runtime.Interfaces.IResourcesSystem",
+    selectedImplementation = "MyProject.CustomResourceSystem"
+}
+```
+
+**注意事项：**
+- 默认系统必须同时标记 `[Default]` 和 `[AutoRegister]`
+- 默认系统在非默认系统之后注册
+- 适用于提供框架内置功能的备选实现
 
 ## 修改注意事项
 
@@ -367,10 +488,19 @@ public class MySystem : IGameSystem, IUpdate, IRegisterEvent
 | 菜单路径 | 窗口 | 说明 |
 |----------|------|------|
 | `Puffin/Preference` | PuffinSettingsWindow | 配置浏览窗口，显示所有带 `[PuffinSetting]` 特性的设置 |
-| `Puffin/Module Manager` | ModuleHubWindow | 模块管理中心 |
+| `Puffin/Module Manager` | ModuleHubWindow | 模块管理中心，支持一键创建 Bootstrap 目录（🚀 按钮） |
 | `Puffin/Environment Manager` | EnvironmentManagerWindow | 环境依赖管理 |
 | `Puffin/System Monitor` | SystemMonitorWindow | 系统监控 |
 | `Puffin/System Registry` | SystemRegistryWindow | 系统注册表 |
+
+### Module Manager 快捷按钮
+
+在模块详情面板中，已安装的模块会显示以下快捷按钮：
+- 📍 定位：在 Project 窗口中定位模块
+- ✏ 编辑：打开模块编辑窗口
+- ⬆ 上传：发布模块到仓库
+- 📦 导出：导出模块为 .unitypackage
+- 🚀 创建 Bootstrap：一键创建 Bootstrap 目录和模板文件
 
 ## 关键文件路径快速索引
 
