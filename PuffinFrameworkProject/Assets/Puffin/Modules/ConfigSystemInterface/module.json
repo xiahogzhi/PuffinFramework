@@ -3,7 +3,7 @@
   "displayName": "接口-配置系统",
   "version": "1.0.0",
   "author": "InputName",
-  "description": "配置系统模块接口",
+  "description": "通用的配置系统接口.",
   "tags": [],
   "unityVersion": "",
   "puffinVersion": "",
