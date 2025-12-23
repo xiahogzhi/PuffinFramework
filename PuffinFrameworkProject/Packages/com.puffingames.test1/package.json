@@ -1,0 +1,11 @@
+{
+  "name": "com.puffingames.test1",
+  "displayName": "Test1",
+  "version": "0.1.0",
+  "unity": "6000.3",
+  "description": "测试说明",
+  "author": {
+    "name": "InputName"
+  },
+  "_fingerprint": "808e53d74b7b4db8c2c0270df997643689b7d1d6"
+}
