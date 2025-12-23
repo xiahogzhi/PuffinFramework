@@ -368,26 +368,16 @@ namespace Puffin.Editor.Hub.Services
                 File.Delete(cachePath);
             }
 
-            // 下载
-            bool downloaded;
-            if (HubSettings.Instance.useGitHubApiDownload && registry.IsGitHubRepo)
+            // 下载（Releases API 的下载 URL 是直接的二进制链接）
+            var downloader = new Downloader();
+            downloader.OnProgress += (p, dl, total, speed) =>
             {
-                var filePath = $"modules/{module.ModuleId}/{module.Version}/{module.ModuleId}-{module.Version}.zip";
-                var apiUrl = registry.GetFileApiUrl(filePath);
-                downloaded = await DownloadViaGitHubApiAsync(apiUrl, cachePath, registry.authToken);
-            }
-            else
-            {
-                var downloader = new Downloader();
-                downloader.OnProgress += (p, dl, total, speed) =>
-                {
-                    task.Progress = p;
-                    task.Downloaded = dl;
-                    task.Total = total;
-                    task.Speed = speed;
-                };
-                downloaded = await downloader.DownloadAsync(downloadUrl, cachePath);
-            }
+                task.Progress = p;
+                task.Downloaded = dl;
+                task.Total = total;
+                task.Speed = speed;
+            };
+            var downloaded = await downloader.DownloadAsync(downloadUrl, cachePath);
 
             if (!downloaded)
             {
@@ -549,21 +539,11 @@ namespace Puffin.Editor.Hub.Services
             if (!useCache)
             {
                 OnStatusChanged?.Invoke($"正在下载: {module.ModuleId}");
-                bool downloaded;
 
-                // 使用 GitHub API 下载（绕过 CDN 缓存）
-                if (HubSettings.Instance.useGitHubApiDownload && registry.IsGitHubRepo)
-                {
-                    var filePath = $"modules/{module.ModuleId}/{module.Version}/{module.ModuleId}-{module.Version}.zip";
-                    var apiUrl = registry.GetFileApiUrl(filePath);
-                    downloaded = await DownloadViaGitHubApiAsync(apiUrl, cachePath, registry.authToken);
-                }
-                else
-                {
-                    var downloader = new Downloader();
-                    downloader.OnProgress += (p, dl, total, speed) => OnDownloadProgress?.Invoke(p, dl, total, speed);
-                    downloaded = await downloader.DownloadAsync(downloadUrl, cachePath);
-                }
+                // 下载（Releases API 的下载 URL 是直接的二进制链接）
+                var downloader = new Downloader();
+                downloader.OnProgress += (p, dl, total, speed) => OnDownloadProgress?.Invoke(p, dl, total, speed);
+                var downloaded = await downloader.DownloadAsync(downloadUrl, cachePath);
 
                 if (!downloaded)
                 {
@@ -638,44 +618,6 @@ namespace Puffin.Editor.Hub.Services
                 requirement = envDep.optional ? DependencyRequirement.Optional : DependencyRequirement.Required,
                 asmdefName = envDep.asmdefName
             };
-        }
-
-        /// <summary>
-        /// 通过 GitHub API 下载文件（绕过 CDN 缓存）
-        /// </summary>
-        private async UniTask<bool> DownloadViaGitHubApiAsync(string apiUrl, string savePath, string authToken)
-        {
-            if (string.IsNullOrEmpty(apiUrl))
-                return false;
-
-            using var request = UnityEngine.Networking.UnityWebRequest.Get(apiUrl);
-            request.SetRequestHeader("Accept", "application/vnd.github.v3+json");
-            request.SetRequestHeader("User-Agent", "PuffinHub");
-            if (!string.IsNullOrEmpty(authToken))
-                request.SetRequestHeader("Authorization", $"Bearer {authToken}");
-
-            await request.SendWebRequest();
-
-            if (request.result != UnityEngine.Networking.UnityWebRequest.Result.Success)
-            {
-                Debug.LogWarning($"[Hub] GitHub API 下载失败: {request.error}");
-                return false;
-            }
-
-            // GitHub API 返回 JSON，content 字段是 base64 编码
-            var response = request.downloadHandler.text;
-            var json = JObject.Parse(response);
-            var content = json["content"]?.Value<string>();
-            if (string.IsNullOrEmpty(content))
-            {
-                Debug.LogWarning("[Hub] GitHub API 响应中没有 content 字段");
-                return false;
-            }
-
-            var base64Content = content.Replace("\n", "");
-            var bytes = Convert.FromBase64String(base64Content);
-            File.WriteAllBytes(savePath, bytes);
-            return true;
         }
 
         private bool VerifyChecksum(string filePath, string expectedChecksum, out string actualChecksum)
