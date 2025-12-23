@@ -5,6 +5,8 @@
         "PuffinFramework.Runtime",
         "LubanConfigModule.Runtime",
         "PuffinFramework.Editor",
+        "ConfigSystemInterface.Runtime",
+        "ResourcesSystemInterface.Runtime",
         "UniTask"
     ],
     "includePlatforms": [

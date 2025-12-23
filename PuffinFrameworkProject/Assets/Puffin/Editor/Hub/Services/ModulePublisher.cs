@@ -208,7 +208,7 @@ namespace Puffin.Editor.Hub.Services
         }
 
         /// <summary>
-        /// 上传模块到 GitHub 仓库
+        /// 上传模块到 GitHub 仓库（使用 Releases API，支持最大 2GB 文件）
         /// </summary>
         public async UniTask<bool> UploadToGitHubAsync(string packagePath, HubModuleManifest manifest, RegistrySource registry, Action<string> onStatus = null)
         {
@@ -220,60 +220,52 @@ namespace Puffin.Editor.Hub.Services
 
             var moduleId = manifest.moduleId;
             var version = manifest.version;
-            var basePath = $"modules/{moduleId}/{version}";
+            var releaseTag = $"{moduleId}-{version}";
 
             // 解析 owner/repo
-            var url = registry.url.Trim().TrimEnd('/');
-            // 移除可能的 https://github.com/ 前缀
-            if (url.StartsWith("https://github.com/"))
-                url = url.Substring("https://github.com/".Length);
-            if (url.StartsWith("github.com/"))
-                url = url.Substring("github.com/".Length);
-
-            var parts = url.Split('/');
-            if (parts.Length < 2)
+            var (owner, repo) = ParseGitHubUrl(registry.url);
+            if (owner == null)
             {
                 Debug.LogError($"[Hub] 无效的仓库 URL: {registry.url}，格式应为 owner/repo");
                 return false;
             }
-            var owner = parts[0];
-            var repo = parts[1];
 
-            // 验证仓库和分支
+            Debug.Log($"[Hub] 上传目标: {owner}/{repo}, Release Tag: {releaseTag}");
+
+            // 验证仓库
             onStatus?.Invoke("验证仓库...");
             var repoExists = await VerifyRepoAsync(owner, repo, registry.authToken);
             if (!repoExists)
             {
-                Debug.LogError($"[Hub] 仓库 {owner}/{repo} 不存在或无权访问");
-                return false;
-            }
-
-            onStatus?.Invoke("验证分支...");
-            var branchExists = await VerifyBranchAsync(owner, repo, registry.branch, registry.authToken);
-            if (!branchExists)
-            {
-                Debug.LogError($"[Hub] 分支 '{registry.branch}' 不存在");
+                Debug.LogError($"[Hub] 仓库 {owner}/{repo} 不存在或无权访问（需要 Token 有 repo 权限）");
                 return false;
             }
 
             try
             {
-                // 1. 上传 zip 文件
+                // 1. 创建或获取 Release
+                onStatus?.Invoke($"正在创建 Release {releaseTag}...");
+                var releaseInfo = await GetOrCreateReleaseAsync(owner, repo, releaseTag, registry.authToken);
+                if (releaseInfo == null) return false;
+
+                var (releaseId, uploadUrl) = releaseInfo.Value;
+
+                // 2. 上传 zip 文件
                 onStatus?.Invoke($"正在上传 {moduleId}-{version}.zip...");
                 var zipBytes = File.ReadAllBytes(packagePath);
-                var zipSuccess = await UploadFileAsync(owner, repo, registry.branch, $"{basePath}/{moduleId}-{version}.zip", zipBytes, registry.authToken);
+                var zipSuccess = await UploadReleaseAssetAsync(owner, repo, releaseId, uploadUrl, $"{moduleId}-{version}.zip", zipBytes, registry.authToken);
                 if (!zipSuccess) return false;
 
-                // 2. 上传 manifest.json
+                // 3. 上传 manifest.json
                 onStatus?.Invoke("正在上传 manifest.json...");
                 var manifestPath = Path.ChangeExtension(packagePath, null) + "-manifest.json";
                 var manifestBytes = File.ReadAllBytes(manifestPath);
-                var manifestSuccess = await UploadFileAsync(owner, repo, registry.branch, $"{basePath}/manifest.json", manifestBytes, registry.authToken);
+                var manifestSuccess = await UploadReleaseAssetAsync(owner, repo, releaseId, uploadUrl, "manifest.json", manifestBytes, registry.authToken);
                 if (!manifestSuccess) return false;
 
-                // 3. 更新 registry.json
+                // 4. 更新 registry.json（存储在 registry Release 中）
                 onStatus?.Invoke("正在更新 registry.json...");
-                var registrySuccess = await UpdateRegistryJsonAsync(owner, repo, registry.branch, moduleId, version, manifest.displayName, registry.authToken);
+                var registrySuccess = await UpdateRegistryJsonAsync(owner, repo, moduleId, version, manifest.displayName, registry.authToken);
                 if (!registrySuccess)
                     Debug.LogWarning("[Hub] registry.json 更新失败，模块已上传但可能不会显示在列表中");
 
@@ -288,50 +280,60 @@ namespace Puffin.Editor.Hub.Services
             }
         }
 
-        private async UniTask<bool> UploadFileAsync(string owner, string repo, string branch, string path, byte[] content, string token)
+        private (string owner, string repo) ParseGitHubUrl(string url)
         {
-            var encodedPath = string.Join("/", path.Split('/').Select(Uri.EscapeDataString));
-            var url = $"https://api.github.com/repos/{owner}/{repo}/contents/{encodedPath}";
+            url = url.Trim().TrimEnd('/');
+            if (url.StartsWith("https://github.com/"))
+                url = url.Substring("https://github.com/".Length);
+            if (url.StartsWith("github.com/"))
+                url = url.Substring("github.com/".Length);
 
-            var base64Content = Convert.ToBase64String(content);
+            var parts = url.Split('/');
+            if (parts.Length < 2)
+                return (null, null);
+            return (parts[0], parts[1]);
+        }
 
-            // GitHub Contents API 限制 100MB
-            if (content.Length > 100 * 1024 * 1024)
-            {
-                Debug.LogError($"[Hub] 文件太大 ({content.Length / 1024.0 / 1024.0:F2} MB)，超过 GitHub Contents API 100MB 限制");
-                return false;
-            }
-
-            // 检查文件是否存在（获取 sha 用于更新）
-            string sha = null;
+        /// <summary>
+        /// 获取或创建 Release
+        /// </summary>
+        private async UniTask<(long releaseId, string uploadUrl)?> GetOrCreateReleaseAsync(string owner, string repo, string tag, string token)
+        {
+            // 先尝试获取已存在的 Release
+            var getUrl = $"https://api.github.com/repos/{owner}/{repo}/releases/tags/{tag}";
             try
             {
-                var getRequest = UnityEngine.Networking.UnityWebRequest.Get(url);
-                getRequest.SetRequestHeader("Authorization", $"Bearer {token}");
-                getRequest.SetRequestHeader("User-Agent", "PuffinHub");
-                getRequest.SetRequestHeader("Accept", "application/vnd.github+json");
-                getRequest.SetRequestHeader("X-GitHub-Api-Version", "2022-11-28");
-
-                await getRequest.SendWebRequest();
-
-                if (getRequest.result == UnityEngine.Networking.UnityWebRequest.Result.Success)
+                using (var getRequest = UnityEngine.Networking.UnityWebRequest.Get(getUrl))
                 {
-                    var json = JObject.Parse(getRequest.downloadHandler.text);
-                    sha = json["sha"]?.Value<string>();
+                    getRequest.SetRequestHeader("Authorization", $"Bearer {token}");
+                    getRequest.SetRequestHeader("User-Agent", "PuffinHub");
+                    getRequest.SetRequestHeader("Accept", "application/vnd.github+json");
+                    getRequest.SetRequestHeader("X-GitHub-Api-Version", "2022-11-28");
+
+                    await getRequest.SendWebRequest();
+
+                    if (getRequest.result == UnityEngine.Networking.UnityWebRequest.Result.Success)
+                    {
+                        var json = JObject.Parse(getRequest.downloadHandler.text);
+                        var id = json["id"]?.Value<long>() ?? 0;
+                        var uploadUrl = json["upload_url"]?.Value<string>();
+                        if (id > 0 && !string.IsNullOrEmpty(uploadUrl))
+                            return (id, uploadUrl);
+                    }
+                    // 404 是正常的，表示 Release 不存在，继续创建
                 }
-                getRequest.Dispose();
             }
-            catch { /* 文件不存在，正常 */ }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[Hub] 获取 Release 失败: {e.Message}，尝试创建新 Release");
+            }
 
-            // 构建请求体
-            string body;
-            if (!string.IsNullOrEmpty(sha))
-                body = $"{{\"message\":\"Update {Path.GetFileName(path)}\",\"content\":\"{base64Content}\",\"branch\":\"{branch}\",\"sha\":\"{sha}\"}}";
-            else
-                body = $"{{\"message\":\"Add {Path.GetFileName(path)}\",\"content\":\"{base64Content}\",\"branch\":\"{branch}\"}}";
+            // 创建新 Release
+            var createUrl = $"https://api.github.com/repos/{owner}/{repo}/releases";
+            var body = JsonConvert.SerializeObject(new { tag_name = tag, name = tag, draft = false, prerelease = false });
+            var bodyBytes = Encoding.UTF8.GetBytes(body);
 
-            var bodyBytes = System.Text.Encoding.UTF8.GetBytes(body);
-            var request = new UnityEngine.Networking.UnityWebRequest(url, "PUT");
+            var request = new UnityEngine.Networking.UnityWebRequest(createUrl, "POST");
             request.uploadHandler = new UnityEngine.Networking.UploadHandlerRaw(bodyBytes);
             request.downloadHandler = new UnityEngine.Networking.DownloadHandlerBuffer();
             request.SetRequestHeader("Authorization", $"Bearer {token}");
@@ -344,14 +346,136 @@ namespace Puffin.Editor.Hub.Services
 
             var responseCode = request.responseCode;
             var responseText = request.downloadHandler?.text ?? "";
-            var result = request.result;
             request.Dispose();
 
-            if (responseCode == 201 || responseCode == 200)
-                return true;
+            if (responseCode == 201)
+            {
+                var json = JObject.Parse(responseText);
+                var id = json["id"]?.Value<long>() ?? 0;
+                var uploadUrl = json["upload_url"]?.Value<string>();
+                if (id > 0 && !string.IsNullOrEmpty(uploadUrl))
+                    return (id, uploadUrl);
+            }
 
-            Debug.LogError($"[Hub] 上传 {Path.GetFileName(path)} 失败: {responseCode} - {responseText}");
+            // 提供更详细的错误信息
+            var errorMsg = $"[Hub] 创建 Release 失败: {responseCode}";
+            if (responseCode == 404)
+                errorMsg += "\n  可能原因: 仓库不存在或 Token 无权访问";
+            else if (responseCode == 403)
+                errorMsg += "\n  可能原因: Token 权限不足，需要 'contents: write' 权限";
+            else if (responseCode == 422)
+                errorMsg += "\n  可能原因: Release tag 已存在或参数无效";
+            errorMsg += $"\n  响应: {responseText}";
+            Debug.LogError(errorMsg);
+            return null;
+        }
+
+        /// <summary>
+        /// 上传 Release Asset（支持覆盖，带重试）
+        /// </summary>
+        private async UniTask<bool> UploadReleaseAssetAsync(string owner, string repo, long releaseId, string uploadUrl, string fileName, byte[] content, string token)
+        {
+            // 先删除同名 Asset（如果存在）
+            await DeleteReleaseAssetAsync(owner, repo, releaseId, fileName, token);
+
+            // 上传新 Asset（带重试）
+            var url = uploadUrl.Replace("{?name,label}", $"?name={Uri.EscapeDataString(fileName)}");
+            const int maxRetries = 3;
+
+            for (int retry = 0; retry < maxRetries; retry++)
+            {
+                if (retry > 0)
+                {
+                    Debug.Log($"[Hub] 重试上传 {fileName} ({retry}/{maxRetries})...");
+                    await UniTask.Delay(1000 * retry); // 递增延迟
+                }
+
+                try
+                {
+                    var request = new UnityEngine.Networking.UnityWebRequest(url, "POST");
+                    request.uploadHandler = new UnityEngine.Networking.UploadHandlerRaw(content);
+                    request.downloadHandler = new UnityEngine.Networking.DownloadHandlerBuffer();
+                    request.timeout = 300; // 5分钟超时
+                    request.SetRequestHeader("Authorization", $"Bearer {token}");
+                    request.SetRequestHeader("User-Agent", "PuffinHub");
+                    request.SetRequestHeader("Accept", "application/vnd.github+json");
+                    request.SetRequestHeader("Content-Type", "application/octet-stream");
+                    request.SetRequestHeader("X-GitHub-Api-Version", "2022-11-28");
+
+                    await request.SendWebRequest();
+
+                    var responseCode = request.responseCode;
+                    var responseText = request.downloadHandler?.text ?? "";
+                    var error = request.error;
+                    request.Dispose();
+
+                    if (responseCode == 201)
+                        return true;
+
+                    // 如果是网络错误，重试
+                    if (!string.IsNullOrEmpty(error) && (error.Contains("Curl") || error.Contains("HTTP/2")))
+                    {
+                        Debug.LogWarning($"[Hub] 网络错误: {error}");
+                        continue;
+                    }
+
+                    Debug.LogError($"[Hub] 上传 Asset {fileName} 失败: {responseCode} - {responseText}");
+                    return false;
+                }
+                catch (Exception e)
+                {
+                    Debug.LogWarning($"[Hub] 上传异常: {e.Message}");
+                    if (retry == maxRetries - 1)
+                    {
+                        Debug.LogError($"[Hub] 上传 {fileName} 失败，已重试 {maxRetries} 次");
+                        return false;
+                    }
+                }
+            }
+
             return false;
+        }
+
+        /// <summary>
+        /// 删除 Release Asset
+        /// </summary>
+        private async UniTask DeleteReleaseAssetAsync(string owner, string repo, long releaseId, string fileName, string token)
+        {
+            // 获取 Release 的所有 Assets
+            var listUrl = $"https://api.github.com/repos/{owner}/{repo}/releases/{releaseId}/assets";
+            using var listRequest = UnityEngine.Networking.UnityWebRequest.Get(listUrl);
+            listRequest.SetRequestHeader("Authorization", $"Bearer {token}");
+            listRequest.SetRequestHeader("User-Agent", "PuffinHub");
+            listRequest.SetRequestHeader("Accept", "application/vnd.github+json");
+            listRequest.SetRequestHeader("X-GitHub-Api-Version", "2022-11-28");
+
+            await listRequest.SendWebRequest();
+
+            if (listRequest.result != UnityEngine.Networking.UnityWebRequest.Result.Success)
+                return;
+
+            var assets = JArray.Parse(listRequest.downloadHandler.text);
+            foreach (var asset in assets)
+            {
+                if (asset["name"]?.Value<string>() == fileName)
+                {
+                    var assetId = asset["id"]?.Value<long>() ?? 0;
+                    if (assetId > 0)
+                    {
+                        var deleteUrl = $"https://api.github.com/repos/{owner}/{repo}/releases/assets/{assetId}";
+                        var deleteRequest = new UnityEngine.Networking.UnityWebRequest(deleteUrl, "DELETE");
+                        deleteRequest.downloadHandler = new UnityEngine.Networking.DownloadHandlerBuffer();
+                        deleteRequest.SetRequestHeader("Authorization", $"Bearer {token}");
+                        deleteRequest.SetRequestHeader("User-Agent", "PuffinHub");
+                        deleteRequest.SetRequestHeader("Accept", "application/vnd.github+json");
+                        deleteRequest.SetRequestHeader("X-GitHub-Api-Version", "2022-11-28");
+
+                        await deleteRequest.SendWebRequest();
+                        deleteRequest.Dispose();
+                    }
+                    break;
+                }
+            }
         }
 
         private async UniTask<bool> VerifyRepoAsync(string owner, string repo, string token)
@@ -373,54 +497,21 @@ namespace Puffin.Editor.Hub.Services
             return response.Contains("\"push\":true") || response.Contains("\"admin\":true");
         }
 
-        private async UniTask<bool> VerifyBranchAsync(string owner, string repo, string branch, string token)
-        {
-            var url = $"https://api.github.com/repos/{owner}/{repo}/branches/{branch}";
-            using var request = UnityEngine.Networking.UnityWebRequest.Get(url);
-            request.SetRequestHeader("Authorization", $"Bearer {token}");
-            request.SetRequestHeader("User-Agent", "PuffinHub");
-            request.SetRequestHeader("Accept", "application/vnd.github+json");
-
-            await request.SendWebRequest();
-
-            return request.result == UnityEngine.Networking.UnityWebRequest.Result.Success;
-        }
-
         /// <summary>
-        /// 更新 registry.json，添加新模块版本
+        /// 更新 registry.json（存储在 registry Release 中）
         /// </summary>
-        private async UniTask<bool> UpdateRegistryJsonAsync(string owner, string repo, string branch, string moduleId, string version, string displayName, string token)
+        private async UniTask<bool> UpdateRegistryJsonAsync(string owner, string repo, string moduleId, string version, string displayName, string token)
         {
-            var url = $"https://api.github.com/repos/{owner}/{repo}/contents/registry.json?ref={branch}";
+            const string registryTag = "registry";
+
+            // 获取或创建 registry Release
+            var releaseInfo = await GetOrCreateReleaseAsync(owner, repo, registryTag, token);
+            if (releaseInfo == null) return false;
+
+            var (releaseId, uploadUrl) = releaseInfo.Value;
 
             // 获取现有 registry.json
-            string existingContent = null;
-            string sha = null;
-
-            try
-            {
-                var getRequest = UnityEngine.Networking.UnityWebRequest.Get(url);
-                getRequest.SetRequestHeader("Authorization", $"Bearer {token}");
-                getRequest.SetRequestHeader("User-Agent", "PuffinHub");
-                getRequest.SetRequestHeader("Accept", "application/vnd.github+json");
-                getRequest.SetRequestHeader("X-GitHub-Api-Version", "2022-11-28");
-
-                await getRequest.SendWebRequest();
-
-                if (getRequest.result == UnityEngine.Networking.UnityWebRequest.Result.Success)
-                {
-                    var json = JObject.Parse(getRequest.downloadHandler.text);
-                    sha = json["sha"]?.Value<string>();
-                    var content = json["content"]?.Value<string>();
-                    if (!string.IsNullOrEmpty(content))
-                    {
-                        var base64 = content.Replace("\n", "");
-                        existingContent = Encoding.UTF8.GetString(Convert.FromBase64String(base64));
-                    }
-                }
-                getRequest.Dispose();
-            }
-            catch { /* registry.json 不存在 */ }
+            var existingContent = await GetRegistryJsonFromReleaseAsync(owner, repo, releaseId, token);
 
             // 构建新的 registry.json
             var registry = new RegistryJson { name = "Puffin Modules", version = "1.0.0", modules = new List<RegistryModuleEntry>() };
@@ -478,12 +569,46 @@ namespace Puffin.Editor.Hub.Services
                 });
             }
 
-            // 生成 JSON
+            // 生成 JSON 并上传
             var newContent = BuildRegistryJson(registry);
+            var contentBytes = Encoding.UTF8.GetBytes(newContent);
+            return await UploadReleaseAssetAsync(owner, repo, releaseId, uploadUrl, "registry.json", contentBytes, token);
+        }
 
-            // 上传
-            var contentBytes = System.Text.Encoding.UTF8.GetBytes(newContent);
-            return await UploadFileAsync(owner, repo, branch, "registry.json", contentBytes, token);
+        /// <summary>
+        /// 从 Release 获取 registry.json 内容
+        /// </summary>
+        private async UniTask<string> GetRegistryJsonFromReleaseAsync(string owner, string repo, long releaseId, string token)
+        {
+            var listUrl = $"https://api.github.com/repos/{owner}/{repo}/releases/{releaseId}/assets";
+            using var listRequest = UnityEngine.Networking.UnityWebRequest.Get(listUrl);
+            listRequest.SetRequestHeader("Authorization", $"Bearer {token}");
+            listRequest.SetRequestHeader("User-Agent", "PuffinHub");
+            listRequest.SetRequestHeader("Accept", "application/vnd.github+json");
+            listRequest.SetRequestHeader("X-GitHub-Api-Version", "2022-11-28");
+
+            await listRequest.SendWebRequest();
+
+            if (listRequest.result != UnityEngine.Networking.UnityWebRequest.Result.Success)
+                return null;
+
+            var assets = JArray.Parse(listRequest.downloadHandler.text);
+            foreach (var asset in assets)
+            {
+                if (asset["name"]?.Value<string>() == "registry.json")
+                {
+                    var downloadUrl = asset["browser_download_url"]?.Value<string>();
+                    if (!string.IsNullOrEmpty(downloadUrl))
+                    {
+                        using var downloadRequest = UnityEngine.Networking.UnityWebRequest.Get(downloadUrl);
+                        await downloadRequest.SendWebRequest();
+                        if (downloadRequest.result == UnityEngine.Networking.UnityWebRequest.Result.Success)
+                            return downloadRequest.downloadHandler.text;
+                    }
+                    break;
+                }
+            }
+            return null;
         }
 
         private string GetLatestVersion(List<string> versions)
@@ -499,7 +624,7 @@ namespace Puffin.Editor.Hub.Services
         }
 
         /// <summary>
-        /// 删除远程模块版本
+        /// 删除远程模块版本（删除对应的 Release）
         /// </summary>
         public async UniTask<bool> DeleteVersionAsync(RegistrySource registry, string moduleId, string version, Action<string> onStatus = null)
         {
@@ -509,39 +634,24 @@ namespace Puffin.Editor.Hub.Services
                 return false;
             }
 
-            var url = registry.url.Trim().TrimEnd('/');
-            if (url.StartsWith("https://github.com/")) url = url.Substring("https://github.com/".Length);
-            if (url.StartsWith("github.com/")) url = url.Substring("github.com/".Length);
-            var parts = url.Split('/');
-            if (parts.Length < 2) return false;
-            var owner = parts[0];
-            var repo = parts[1];
+            var (owner, repo) = ParseGitHubUrl(registry.url);
+            if (owner == null) return false;
+
+            var releaseTag = $"{moduleId}-{version}";
 
             try
             {
-                // 1. 删除版本目录下的文件
+                // 1. 删除模块版本的 Release
                 onStatus?.Invoke($"正在删除 {moduleId}@{version}...");
-                var basePath = $"modules/{moduleId}/{version}";
-
-                // 获取目录内容
-                var filesUrl = $"https://api.github.com/repos/{owner}/{repo}/contents/{basePath}?ref={registry.branch}";
-                var filesJson = await FetchGitHubApiAsync(filesUrl, registry.authToken);
-                if (!string.IsNullOrEmpty(filesJson))
+                var deleteSuccess = await DeleteReleaseByTagAsync(owner, repo, releaseTag, registry.authToken);
+                if (!deleteSuccess)
                 {
-                    // 解析文件列表并删除（GitHub API 返回数组）
-                    var filesArray = JArray.Parse(filesJson);
-                    foreach (var file in filesArray)
-                    {
-                        var filePath = file["path"]?.Value<string>();
-                        var sha = file["sha"]?.Value<string>();
-                        if (!string.IsNullOrEmpty(filePath) && !string.IsNullOrEmpty(sha))
-                            await DeleteFileAsync(owner, repo, registry.branch, filePath, sha, registry.authToken);
-                    }
+                    Debug.LogWarning($"[Hub] Release {releaseTag} 不存在或删除失败");
                 }
 
                 // 2. 更新 registry.json
                 onStatus?.Invoke("正在更新 registry.json...");
-                await RemoveVersionFromRegistryAsync(owner, repo, registry.branch, moduleId, version, registry.authToken);
+                await RemoveVersionFromRegistryAsync(owner, repo, moduleId, version, registry.authToken);
 
                 onStatus?.Invoke("删除完成!");
                 return true;
@@ -553,49 +663,75 @@ namespace Puffin.Editor.Hub.Services
             }
         }
 
-        private async UniTask<string> FetchGitHubApiAsync(string url, string token)
+        /// <summary>
+        /// 通过 tag 删除 Release
+        /// </summary>
+        private async UniTask<bool> DeleteReleaseByTagAsync(string owner, string repo, string tag, string token)
         {
-            using var request = UnityEngine.Networking.UnityWebRequest.Get(url);
-            request.SetRequestHeader("Authorization", $"Bearer {token}");
-            request.SetRequestHeader("User-Agent", "PuffinHub");
-            request.SetRequestHeader("Accept", "application/vnd.github+json");
-            await request.SendWebRequest();
-            return request.result == UnityEngine.Networking.UnityWebRequest.Result.Success ? request.downloadHandler.text : null;
-        }
+            // 获取 Release ID
+            var getUrl = $"https://api.github.com/repos/{owner}/{repo}/releases/tags/{tag}";
+            using var getRequest = UnityEngine.Networking.UnityWebRequest.Get(getUrl);
+            getRequest.SetRequestHeader("Authorization", $"Bearer {token}");
+            getRequest.SetRequestHeader("User-Agent", "PuffinHub");
+            getRequest.SetRequestHeader("Accept", "application/vnd.github+json");
+            getRequest.SetRequestHeader("X-GitHub-Api-Version", "2022-11-28");
 
-        private async UniTask<bool> DeleteFileAsync(string owner, string repo, string branch, string path, string sha, string token)
-        {
-            var url = $"https://api.github.com/repos/{owner}/{repo}/contents/{path}";
-            var body = $"{{\"message\":\"Delete {System.IO.Path.GetFileName(path)}\",\"sha\":\"{sha}\",\"branch\":\"{branch}\"}}";
-            var bodyBytes = System.Text.Encoding.UTF8.GetBytes(body);
+            await getRequest.SendWebRequest();
 
-            var request = new UnityEngine.Networking.UnityWebRequest(url, "DELETE");
-            request.uploadHandler = new UnityEngine.Networking.UploadHandlerRaw(bodyBytes);
-            request.downloadHandler = new UnityEngine.Networking.DownloadHandlerBuffer();
-            request.SetRequestHeader("Authorization", $"Bearer {token}");
-            request.SetRequestHeader("User-Agent", "PuffinHub");
-            request.SetRequestHeader("Accept", "application/vnd.github+json");
-            request.SetRequestHeader("Content-Type", "application/json");
+            if (getRequest.result != UnityEngine.Networking.UnityWebRequest.Result.Success)
+                return false;
 
-            await request.SendWebRequest();
-            var success = request.responseCode == 200;
-            request.Dispose();
+            var json = JObject.Parse(getRequest.downloadHandler.text);
+            var releaseId = json["id"]?.Value<long>() ?? 0;
+            if (releaseId == 0) return false;
+
+            // 删除 Release
+            var deleteUrl = $"https://api.github.com/repos/{owner}/{repo}/releases/{releaseId}";
+            var deleteRequest = new UnityEngine.Networking.UnityWebRequest(deleteUrl, "DELETE");
+            deleteRequest.downloadHandler = new UnityEngine.Networking.DownloadHandlerBuffer();
+            deleteRequest.SetRequestHeader("Authorization", $"Bearer {token}");
+            deleteRequest.SetRequestHeader("User-Agent", "PuffinHub");
+            deleteRequest.SetRequestHeader("Accept", "application/vnd.github+json");
+            deleteRequest.SetRequestHeader("X-GitHub-Api-Version", "2022-11-28");
+
+            await deleteRequest.SendWebRequest();
+            var success = deleteRequest.responseCode == 204;
+            deleteRequest.Dispose();
+
+            // 删除对应的 tag
+            if (success)
+            {
+                var tagUrl = $"https://api.github.com/repos/{owner}/{repo}/git/refs/tags/{tag}";
+                var tagRequest = new UnityEngine.Networking.UnityWebRequest(tagUrl, "DELETE");
+                tagRequest.downloadHandler = new UnityEngine.Networking.DownloadHandlerBuffer();
+                tagRequest.SetRequestHeader("Authorization", $"Bearer {token}");
+                tagRequest.SetRequestHeader("User-Agent", "PuffinHub");
+                tagRequest.SetRequestHeader("Accept", "application/vnd.github+json");
+                tagRequest.SetRequestHeader("X-GitHub-Api-Version", "2022-11-28");
+
+                await tagRequest.SendWebRequest();
+                tagRequest.Dispose();
+            }
+
             return success;
         }
 
-        private async UniTask<bool> RemoveVersionFromRegistryAsync(string owner, string repo, string branch, string moduleId, string version, string token)
+        /// <summary>
+        /// 从 registry.json 中移除版本
+        /// </summary>
+        private async UniTask<bool> RemoveVersionFromRegistryAsync(string owner, string repo, string moduleId, string version, string token)
         {
-            var url = $"https://api.github.com/repos/{owner}/{repo}/contents/registry.json?ref={branch}";
-            var response = await FetchGitHubApiAsync(url, token);
-            if (string.IsNullOrEmpty(response)) return false;
+            const string registryTag = "registry";
 
-            var json = JObject.Parse(response);
-            var sha = json["sha"]?.Value<string>();
-            var content = json["content"]?.Value<string>();
-            if (string.IsNullOrEmpty(sha) || string.IsNullOrEmpty(content)) return false;
+            // 获取 registry Release
+            var releaseInfo = await GetOrCreateReleaseAsync(owner, repo, registryTag, token);
+            if (releaseInfo == null) return false;
 
-            var base64 = content.Replace("\n", "");
-            var existingContent = Encoding.UTF8.GetString(Convert.FromBase64String(base64));
+            var (releaseId, uploadUrl) = releaseInfo.Value;
+
+            // 获取现有 registry.json
+            var existingContent = await GetRegistryJsonFromReleaseAsync(owner, repo, releaseId, token);
+            if (string.IsNullOrEmpty(existingContent)) return false;
 
             // 解析并修改
             var registry = ParseRegistryJson(existingContent);
@@ -616,8 +752,8 @@ namespace Puffin.Editor.Hub.Services
             }
 
             var newContent = BuildRegistryJson(registry);
-            var contentBytes = System.Text.Encoding.UTF8.GetBytes(newContent);
-            return await UploadFileAsync(owner, repo, branch, "registry.json", contentBytes, token);
+            var contentBytes = Encoding.UTF8.GetBytes(newContent);
+            return await UploadReleaseAssetAsync(owner, repo, releaseId, uploadUrl, "registry.json", contentBytes, token);
         }
 
         private RegistryJson ParseRegistryJson(string content)

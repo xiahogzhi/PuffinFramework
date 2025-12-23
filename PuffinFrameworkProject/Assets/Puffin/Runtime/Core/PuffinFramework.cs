@@ -6,7 +6,9 @@ using Puffin.Runtime.Events.Core;
 using Puffin.Runtime.Interfaces;
 using Puffin.Runtime.Settings;
 using Puffin.Runtime.Tools;
+#if UNITY_EDITOR
 using UnityEditor;
+#endif
 using UnityEngine;
 using Application = UnityEngine.Application;
 
@@ -105,7 +107,7 @@ namespace Puffin.Runtime.Core
         static void Reset()
         {
             Logger = null;
-            ResourcesLoader = null;
+            // ResourcesLoader = null;
             ScannerConfig = null;
             RuntimeConfig = null;
 #if UNITY_EDITOR
@@ -127,7 +129,7 @@ namespace Puffin.Runtime.Core
         {
             if (IsSetup) throw new Exception("PuffinFramework is already Setup.");
 
-            ResourcesLoader = setupContext.ResourcesLoader ?? new DefaultResourceLoader();
+            ResourcesLoader = setupContext.ResourcesLoader ?? new DefaultResourcesLoader();
             Logger = setupContext.Logger ?? new PuffinLogger();
             ScannerConfig = setupContext.ScannerConfig ?? PuffinSettings.Instance.ToScannerConfig();
             RuntimeConfig = setupContext.runtimeConfig ?? PuffinSettings.Instance.ToRuntimeConfig();

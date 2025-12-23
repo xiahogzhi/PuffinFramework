@@ -48,14 +48,14 @@ namespace Puffin.Runtime.Core
         private readonly HashSet<IGameSystem> _initializedSystems = new();
 
         // 生命周期事件列表
-        private readonly List<IUpdate> _updateList = new();
-        private readonly List<IFixedUpdate> _fixedUpdateList = new();
-        private readonly List<ILateUpdate> _lateUpdateList = new();
-        private readonly List<IApplicationQuit> _quitList = new();
-        private readonly List<IApplicationFocusChanged> _focusList = new();
-        private readonly List<IApplicationPause> _pauseList = new();
-        private readonly List<IRegisterEvent> _registerList = new();
-        private readonly List<IInitializeAsync> _initAsyncList = new();
+        private readonly List<ISystemUpdate> _updateList = new();
+        private readonly List<ISystemFixedUpdate> _fixedUpdateList = new();
+        private readonly List<ISystemLateUpdate> _lateUpdateList = new();
+        private readonly List<ISystemApplicationQuit> _quitList = new();
+        private readonly List<ISystemApplicationFocusChanged> _focusList = new();
+        private readonly List<ISystemApplicationPause> _pauseList = new();
+        private readonly List<ISystemRegister> _registerList = new();
+        private readonly List<ISystemInitialize> _initAsyncList = new();
 
         // 性能统计
         private readonly Dictionary<IGameSystem, PerformanceData> _performanceData = new();
@@ -281,10 +281,15 @@ namespace Puffin.Runtime.Core
             // 过滤条件注册
             var filteredTypes = FilterConditionalTypes(systemTypes);
 
-            // 拓扑排序处理依赖
-            var sortedTypes = TopologicalSort(filteredTypes);
+            // 分离默认系统和非默认系统
+            var (defaultTypes, nonDefaultTypes) = SeparateDefaultTypes(filteredTypes);
 
-            foreach (var type in sortedTypes)
+            // 拓扑排序处理依赖（先处理非默认系统）
+            var sortedNonDefaultTypes = TopologicalSort(nonDefaultTypes);
+            var sortedDefaultTypes = TopologicalSort(defaultTypes);
+
+            // 先注册非默认系统
+            foreach (var type in sortedNonDefaultTypes)
             {
                 try
                 {
@@ -295,6 +300,9 @@ namespace Puffin.Runtime.Core
                     _logger.Exception(e);
                 }
             }
+
+            // 再注册默认系统（只注册没有其他实现的接口）
+            RegisterDefaultSystems(sortedDefaultTypes);
 
             // 依赖注入
             InjectDependencies();
@@ -330,7 +338,7 @@ namespace Puffin.Runtime.Core
             InjectDependencies(_typeToInstance[type]);
             SortByPriority();
 
-            if (_typeToInstance[type] is IRegisterEvent reg)
+            if (_typeToInstance[type] is ISystemRegister reg)
             {
                 try
                 {
@@ -342,7 +350,7 @@ namespace Puffin.Runtime.Core
                 }
             }
 
-            if (_typeToInstance[type] is IInitializeAsync init)
+            if (_typeToInstance[type] is ISystemInitialize init)
             {
                 try
                 {
@@ -380,7 +388,7 @@ namespace Puffin.Runtime.Core
             InjectDependencies(_typeToInstance[type]);
             SortByPriority();
 
-            if (_typeToInstance[type] is IRegisterEvent reg)
+            if (_typeToInstance[type] is ISystemRegister reg)
             {
                 try
                 {
@@ -392,7 +400,7 @@ namespace Puffin.Runtime.Core
                 }
             }
 
-            if (_typeToInstance[type] is IInitializeAsync init)
+            if (_typeToInstance[type] is ISystemInitialize init)
             {
                 try
                 {
@@ -488,7 +496,7 @@ namespace Puffin.Runtime.Core
                 return;
 
             // 触发注销事件
-            if (system is IRegisterEvent reg)
+            if (system is ISystemRegister reg)
             {
                 try
                 {
@@ -766,6 +774,110 @@ namespace Puffin.Runtime.Core
             var attr = type.GetCustomAttribute<ConditionalSystemAttribute>();
             if (attr == null) return true;
             return _definedSymbols.Contains(attr.Symbol);
+        }
+
+        #endregion
+
+        #region 默认系统处理
+
+        /// <summary>
+        /// 分离默认系统和非默认系统
+        /// </summary>
+        private (Type[] defaultTypes, Type[] nonDefaultTypes) SeparateDefaultTypes(Type[] types)
+        {
+            var defaultList = new List<Type>();
+            var nonDefaultList = new List<Type>();
+
+            foreach (var type in types)
+            {
+                if (type.GetCustomAttribute<DefaultAttribute>() != null)
+                    defaultList.Add(type);
+                else
+                    nonDefaultList.Add(type);
+            }
+
+            return (defaultList.ToArray(), nonDefaultList.ToArray());
+        }
+
+        /// <summary>
+        /// 注册默认系统（只注册没有其他实现的接口）
+        /// </summary>
+        private void RegisterDefaultSystems(Type[] defaultTypes)
+        {
+            var settings = SystemRegistrySettings.Instance;
+
+            // 按接口分组默认实现
+            var interfaceToDefaults = new Dictionary<Type, List<Type>>();
+            foreach (var type in defaultTypes)
+            {
+                foreach (var iface in type.GetInterfaces())
+                {
+                    if (iface != typeof(IGameSystem) && typeof(IGameSystem).IsAssignableFrom(iface))
+                    {
+                        if (!interfaceToDefaults.ContainsKey(iface))
+                            interfaceToDefaults[iface] = new List<Type>();
+                        interfaceToDefaults[iface].Add(type);
+                    }
+                }
+            }
+
+            // 注册默认系统
+            foreach (var type in defaultTypes)
+            {
+                bool shouldRegister = false;
+
+                // 检查该类型实现的所有接口
+                foreach (var iface in type.GetInterfaces())
+                {
+                    if (iface != typeof(IGameSystem) && typeof(IGameSystem).IsAssignableFrom(iface))
+                    {
+                        // 如果接口还没有被注册（没有非默认实现）
+                        if (!_typeToInstance.ContainsKey(iface))
+                        {
+                            // 检查是否有多个默认实现
+                            var defaults = interfaceToDefaults[iface];
+                            if (defaults.Count > 1)
+                            {
+                                // 检查系统注册表中是否有选择
+                                var selectedImpl = settings?.GetSelectedImplementation(iface.FullName);
+                                if (selectedImpl != null && selectedImpl == type.FullName)
+                                {
+                                    shouldRegister = true;
+                                    break;
+                                }
+                                else if (selectedImpl == null)
+                                {
+                                    // 没有选择，使用第一个
+                                    if (defaults[0] == type)
+                                    {
+                                        _logger.Warning($"接口 {iface.Name} 有多个默认实现，未指定选择，使用第一个: {type.Name}");
+                                        shouldRegister = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                // 只有一个默认实现，直接注册
+                                shouldRegister = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (shouldRegister)
+                {
+                    try
+                    {
+                        Register(type);
+                    }
+                    catch (Exception e)
+                    {
+                        _logger.Exception(e);
+                    }
+                }
+            }
         }
 
         #endregion

@@ -1,0 +1,20 @@
+{
+    "name": "YooAssetSystemModule.Bootstarp",
+    "rootNamespace": "",
+    "references": [
+        "GUID:dfa7079612e96a94186563da8377b12a",
+        "GUID:e34a5702dd353724aa315fb8011f08c3",
+        "GUID:f51ebe6a0ceec4240a699833d6309b23",
+        "GUID:ccae1e92b4ba6974cabad47221ede15a",
+        "GUID:38a90ffdb913bc540a8d016ca92935c0"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

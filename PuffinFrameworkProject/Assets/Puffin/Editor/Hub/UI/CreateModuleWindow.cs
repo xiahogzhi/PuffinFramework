@@ -20,6 +20,7 @@ namespace Puffin.Editor.Hub.UI
         // 创建选项
         private bool _createEditor = true;
         private bool _createResources;
+        private bool _createBootstrap;
         private bool _allowUnsafeCode;
 
         public static void Show(Action onCreated, List<HubModuleInfo> availableModules = null)
@@ -50,6 +51,7 @@ namespace Puffin.Editor.Hub.UI
             EditorGUILayout.LabelField("  Runtime (必需)", EditorStyles.miniLabel);
             _createEditor = EditorGUILayout.Toggle("  Editor", _createEditor);
             _createResources = EditorGUILayout.Toggle("  Resources", _createResources);
+            _createBootstrap = EditorGUILayout.Toggle("  Bootstrap", _createBootstrap);
 
             // 3. 程序集选项
             EditorGUILayout.Space(5);
@@ -99,6 +101,7 @@ namespace Puffin.Editor.Hub.UI
             AssetDatabase.CreateFolder(basePath, "Runtime");
             if (_createEditor) AssetDatabase.CreateFolder(basePath, "Editor");
             if (_createResources) AssetDatabase.CreateFolder(basePath, "Resources");
+            if (_createBootstrap) AssetDatabase.CreateFolder(basePath, "Bootstrap");
 
             // 创建 asmdef
             var runtimeAsmdef = CreateAsmdef($"{moduleId}.Runtime", new[] { "PuffinFramework.Runtime" }, null, _allowUnsafeCode);
@@ -110,6 +113,50 @@ namespace Puffin.Editor.Hub.UI
                     new[] { "PuffinFramework.Runtime", $"{moduleId}.Runtime", "PuffinFramework.Editor" },
                     new[] { "Editor" }, _allowUnsafeCode);
                 System.IO.File.WriteAllText($"{Application.dataPath}/Puffin/Modules/{moduleId}/Editor/{moduleId}.Editor.asmdef", editorAsmdef);
+            }
+
+            if (_createBootstrap)
+            {
+                var bootstrapAsmdef = CreateAsmdef($"{moduleId}.Bootstrap",
+                    new[] { "PuffinFramework.Runtime", "PuffinFramework.Launcher", $"{moduleId}.Runtime", "UniTask" },
+                    null, false);
+                System.IO.File.WriteAllText($"{Application.dataPath}/Puffin/Modules/{moduleId}/Bootstrap/{moduleId}.Bootstrap.asmdef", bootstrapAsmdef);
+
+                // 创建 Bootstrap 模板类
+                var className = moduleId.Replace(".", "").Replace("-", "").Replace(" ", "");
+                var ns = moduleId.Replace("-", ".").Replace(" ", "");
+                var bootstrapCode = $@"using Cysharp.Threading.Tasks;
+using Puffin.Boot.Runtime;
+using Puffin.Runtime.Core;
+
+namespace {ns}.Bootstrap
+{{
+    /// <summary>
+    /// {moduleId} 模块启动器
+    /// </summary>
+    public class {className}Bootstrap : IBootstrap
+    {{
+        public int Priority => 0;
+        public bool SupportEditorMode => false;
+
+        public async UniTask OnPreSetup(SetupContext context)
+        {{
+            await UniTask.CompletedTask;
+        }}
+
+        public async UniTask OnPostSetup()
+        {{
+            await UniTask.CompletedTask;
+        }}
+
+        public async UniTask OnPostStart()
+        {{
+            await UniTask.CompletedTask;
+        }}
+    }}
+}}
+";
+                System.IO.File.WriteAllText($"{Application.dataPath}/Puffin/Modules/{moduleId}/Bootstrap/{className}Bootstrap.cs", bootstrapCode);
             }
 
             // 创建 module.json

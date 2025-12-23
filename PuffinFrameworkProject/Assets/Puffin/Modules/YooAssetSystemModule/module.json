@@ -1,0 +1,45 @@
+{
+  "moduleId": "YooAssetSystemModule",
+  "displayName": "YooAsset系统模块",
+  "version": "1.0.0",
+  "author": "InputName",
+  "description": "集成YooAsset系统模块,可以实现热更新",
+  "tags": [
+    "资源管理",
+    "热更新"
+  ],
+  "unityVersion": "2021.3",
+  "puffinVersion": "",
+  "moduleDependencies": [
+    {
+      "moduleId": "ResourcesSystemInterface",
+      "version": "1.0.0",
+      "registryId": null,
+      "optional": false
+    }
+  ],
+  "envDependencies": [
+    {
+      "id": "com.unity.scriptablebuildpipeline",
+      "source": 4,
+      "type": 0,
+      "url": "",
+      "version": "1.21.0",
+      "installDir": null,
+      "extractPath": null,
+      "requiredFiles": null,
+      "optional": false,
+      "targetFrameworks": null,
+      "asmdefName": null
+    }
+  ],
+  "references": {
+    "moduleReferences": [],
+    "references": "UniTask.asmdef"
+  },
+  "downloadUrl": "",
+  "checksum": "",
+  "size": 0,
+  "releaseNotes": "",
+  "publishedAt": ""
+}

@@ -121,6 +121,16 @@ namespace Puffin.Editor.Environment.Core
             _tasks[dep.id] = task;
             OnTasksChanged?.Invoke();
 
+            // UPM 包不需要下载，直接安装
+            if (dep.source == DependencySource.UnityPackage)
+            {
+                task.State = TaskState.Downloaded;
+                task.Progress = 1f;
+                _installQueue.Enqueue(task);
+                OnTasksChanged?.Invoke();
+                return;
+            }
+
             RunDownloadAsync(task).Forget();
         }
 

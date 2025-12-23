@@ -46,6 +46,7 @@ namespace Puffin.Editor.Core
             public List<string> Dependencies = new();
             public bool IsEnabled;
             public bool HasDisabledDependency;
+            public bool IsDefault; // 是否为默认系统
             // 接口冲突信息
             public Type ConflictInterface;
             public List<Type> ConflictImplementations;
@@ -346,6 +347,10 @@ namespace Puffin.Editor.Core
                     ? system.DisplayName
                     : $"{system.DisplayName} ({system.Alias})";
 
+                // 添加默认系统标记
+                if (system.IsDefault)
+                    displayName += " [Default]";
+
                 GUILayout.Label(displayName, nameStyle, GUILayout.Width(_colName + SplitterWidth));
             }
 
@@ -393,6 +398,7 @@ namespace Puffin.Editor.Core
                         var alias = type.GetCustomAttribute<SystemAliasAttribute>();
                         var priorityAttr = type.GetCustomAttribute<SystemPriorityAttribute>();
                         var dependsOnAttrs = type.GetCustomAttributes<DependsOnAttribute>();
+                        var isDefault = type.GetCustomAttribute<DefaultAttribute>() != null;
 
                         var info = new ScannedSystemInfo
                         {
@@ -400,7 +406,8 @@ namespace Puffin.Editor.Core
                             DisplayName = type.Name,
                             Alias = alias?.Alias,
                             Priority = priorityAttr?.Priority ?? 0,
-                            Dependencies = dependsOnAttrs.Select(d => d.DependencyType.Name).ToList()
+                            Dependencies = dependsOnAttrs.Select(d => d.DependencyType.Name).ToList(),
+                            IsDefault = isDefault
                         };
 
                         // 从配置中读取启用状态

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Reflection;
 using Cysharp.Threading.Tasks;
+using Puffin.Modules.ResourcesSystemInterface.Runtime;
 using Puffin.Runtime.Core;
 using Puffin.Runtime.Core.Attributes;
 using Puffin.Runtime.Interfaces;
@@ -20,7 +21,8 @@ using Object = UnityEngine.Object;
 namespace XFrameworks.Systems.UISystems.Core
 {
     [SystemAlias("UI系统")]
-    public class UISystem : IGameSystem, IInitializeAsync
+    [DependsOn(typeof(IResourcesSystem))]
+    public class UISystem : IGameSystem, ISystemInitialize
     {
         /// <summary>
         /// Resources下的目录路径
@@ -182,19 +184,19 @@ namespace XFrameworks.Systems.UISystems.Core
 
         private Material _blurMat;
 
-        Material blurMat
-        {
-            get
-            {
-                if (_blurMat == null)
-                {
-                    _blurMat = PuffinFramework.ResourcesLoader.Load<Material>(
-                        "Assets/Unified-Universal-Blur-0.4.0/Materials/UniversalBlurForUI.mat");
-                }
-
-                return _blurMat;
-            }
-        }
+        // Material blurMat
+        // {
+        //     get
+        //     {
+        //         if (_blurMat == null)
+        //         {
+        //             _blurMat = PuffinFramework.ResourcesLoader.Load<Material>(
+        //                 "Assets/Unified-Universal-Blur-0.4.0/Materials/UniversalBlurForUI.mat");
+        //         }
+        //
+        //         return _blurMat;
+        //     }
+        // }
 
         // public bool hasBlurMask => _blurMask.activeSelf;
         //
@@ -667,7 +669,7 @@ namespace XFrameworks.Systems.UISystems.Core
             Log.Info($"耗时:{tw.Elapsed.TotalSeconds}s");
         }
 
-        UniTask IInitializeAsync.OnInitializeAsync()
+        UniTask ISystemInitialize.OnInitializeAsync()
         {
             InitFromPrefab();
             InitMask();

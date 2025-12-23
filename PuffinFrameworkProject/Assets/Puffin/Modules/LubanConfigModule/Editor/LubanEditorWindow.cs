@@ -7,6 +7,7 @@ using Cysharp.Threading.Tasks;
 using Puffin.Editor.Environment;
 using Puffin.Editor.Environment.Core;
 using Puffin.Editor.Environment.UI;
+using Puffin.Modules.ConfigSystemInterface.Runtime;
 using Puffin.Modules.LubanConfigModule.Runtime;
 using Puffin.Runtime.Core;
 using UnityEditor;
@@ -83,7 +84,7 @@ namespace Puffin.Modules.LubanConfigModule.Editor
                 SaveLubanConf();
 
             if (GUILayout.Button("重新加载", EditorStyles.toolbarButton))
-                PuffinFramework.GetSystem<IConfigSystem>()?.ReloadAsync().Forget();
+                PuffinFramework.GetSystem<IConfigSystem>()?.Reload();
 
             GUILayout.FlexibleSpace();
 

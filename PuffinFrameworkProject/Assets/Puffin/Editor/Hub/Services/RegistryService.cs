@@ -373,7 +373,7 @@ namespace Puffin.Editor.Hub.Services
         }
 
         /// <summary>
-        /// 通过 GitHub API 获取文件内容（绕过 CDN 缓存）
+        /// 通过 GitHub Releases API 获取 registry.json 内容（绕过 CDN 缓存）
         /// </summary>
         private async UniTask<string> FetchGitHubApiContentAsync(string apiUrl, string authToken = null)
         {
@@ -381,8 +381,9 @@ namespace Puffin.Editor.Hub.Services
                 return null;
 
             using var request = UnityWebRequest.Get(apiUrl);
-            request.SetRequestHeader("Accept", "application/vnd.github.v3+json");
+            request.SetRequestHeader("Accept", "application/vnd.github+json");
             request.SetRequestHeader("User-Agent", "PuffinHub");
+            request.SetRequestHeader("X-GitHub-Api-Version", "2022-11-28");
             if (!string.IsNullOrEmpty(authToken))
                 request.SetRequestHeader("Authorization", $"Bearer {authToken}");
 
@@ -394,15 +395,30 @@ namespace Puffin.Editor.Hub.Services
                 return null;
             }
 
-            // GitHub API 返回 JSON，content 字段是 base64 编码
+            // Releases API 返回 Release 信息，需要从 assets 中找到 registry.json 的下载 URL
             var response = request.downloadHandler.text;
             var json = JObject.Parse(response);
-            var content = json["content"]?.Value<string>();
-            if (string.IsNullOrEmpty(content)) return null;
+            var assets = json["assets"] as JArray;
+            if (assets == null) return null;
 
-            var base64Content = content.Replace("\n", "");
-            var bytes = Convert.FromBase64String(base64Content);
-            return System.Text.Encoding.UTF8.GetString(bytes);
+            foreach (var asset in assets)
+            {
+                if (asset["name"]?.Value<string>() == "registry.json")
+                {
+                    var downloadUrl = asset["browser_download_url"]?.Value<string>();
+                    if (!string.IsNullOrEmpty(downloadUrl))
+                    {
+                        // 下载 registry.json 内容
+                        using var downloadRequest = UnityWebRequest.Get(downloadUrl);
+                        await downloadRequest.SendWebRequest();
+                        if (downloadRequest.result == UnityWebRequest.Result.Success)
+                            return downloadRequest.downloadHandler.text;
+                    }
+                    break;
+                }
+            }
+
+            return null;
         }
 
         private Dictionary<string, ModuleVersionInfo> ParseModulesDict(string jsonStr)

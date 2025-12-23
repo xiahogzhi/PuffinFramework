@@ -1,60 +1,37 @@
-// using System;
-// using Sirenix.OdinInspector;
-// using Unity.Cinemachine;
-// using UnityEngine;
-// using UnityEngine.InputSystem;
-//
-// namespace Puffin.Runtime.Core
-// {
-//     public class LauncherSetting : MonoBehaviour
-//     {
-//         private static LauncherSetting _instance;
-//
-//         public static LauncherSetting instance
-//         {
-//             get
-//             {
-//                 if (_instance == null)
-//                     _instance = FindAnyObjectByType<LauncherSetting>();
-//
-//                 return _instance;
-//             }
-//         }
-//
-//         [Serializable]
-//         public class SystemConfig // : IBoxInlineGUI
-//         {
-//             [LabelText("UI摄像机")] [SerializeField] private Camera _uiCamera;
-//             [LabelText("游戏摄像机")] [SerializeField] private Camera _gameCamera;
-//             [LabelText("游戏摄像机")] [SerializeField] private CinemachineVirtualCameraBase _mainCamera;
-//             [LabelText("UIRoot")] [SerializeField] private Transform _uiRoot;
-//             [SerializeField] private Canvas _canvas;
-//             [LabelText("输入")] [SerializeField] private PlayerInput _input;
-//
-//             #region 属性
-//
-//             public Camera uiCamera => _uiCamera;
-//
-//             public Camera gameCamera => _gameCamera;
-//
-//             public Transform uiRoot => _uiRoot;
-//
-//
-//             public Canvas canvas => _canvas;
-//
-//             public CinemachineVirtualCameraBase mainCamera => _mainCamera;
-//
-//             public PlayerInput input => _input;
-//
-//             #endregion
-//         }
-//
-//
-//  
-//
-//         [LabelText("系统配置")] [SerializeField] private SystemConfig _systemConfig;
-//       
-//
-//         public SystemConfig systemConfig => _systemConfig;
-//     }
-// }
+using System.Collections.Generic;
+using Puffin.Runtime.Settings;
+using UnityEngine;
+
+namespace Puffin.Boot.Runtime
+{
+    /// <summary>
+    /// 启动器配置
+    /// </summary>
+    [SettingsPath("LauncherSetting")]
+    [PuffinSetting("Launcher")]
+    public class LauncherSetting : SettingsBase<LauncherSetting>
+    {
+        [Header("Bootstrap 扫描配置")]
+        [Tooltip("是否启用 Bootstrap 系统")]
+        public bool enableBootstrap = true;
+
+        [Tooltip("要扫描的程序集前缀（为空则扫描所有）")]
+        public List<string> scanAssemblyPrefixes = new();
+
+        [Tooltip("排除的程序集前缀")]
+        public List<string> excludeAssemblyPrefixes = new()
+        {
+            "System",
+            "Microsoft",
+            "Unity",
+            "mscorlib",
+            "netstandard",
+            "Mono",
+            "nunit"
+        };
+
+        [Header("启动配置")]
+        [Tooltip("是否在启动时显示 Bootstrap 执行日志")]
+        public bool showBootstrapLogs = true;
+    }
+}
