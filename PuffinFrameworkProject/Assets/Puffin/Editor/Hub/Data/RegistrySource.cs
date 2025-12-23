@@ -27,25 +27,25 @@ namespace Puffin.Editor.Hub.Data
         }
 
         /// <summary>
-        /// 获取 registry.json 的下载 URL（从 registry Release 的 Asset）
+        /// 获取 registry.json 的下载 URL（从仓库根目录）
         /// </summary>
         public string GetRegistryUrl()
         {
             if (url.StartsWith("http"))
                 return url.TrimEnd('/') + "/registry.json";
-            // GitHub Releases: https://github.com/{owner}/{repo}/releases/download/{tag}/{filename}
-            return $"https://github.com/{url}/releases/download/registry/registry.json";
+            // GitHub raw: https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{path}
+            return $"https://raw.githubusercontent.com/{url}/{branch}/registry.json";
         }
 
         /// <summary>
-        /// 获取 registry.json 的 GitHub API URL（无缓存）
+        /// 获取 registry.json 的 GitHub Contents API URL（无缓存）
         /// </summary>
         public string GetRegistryApiUrl()
         {
             if (url.StartsWith("http"))
                 return null;  // 非 GitHub 仓库不支持
-            // 使用 Releases API 获取 registry Release 的 assets
-            return $"https://api.github.com/repos/{url}/releases/tags/registry";
+            // 使用 Contents API
+            return $"https://api.github.com/repos/{url}/contents/registry.json?ref={branch}";
         }
 
         /// <summary>
@@ -54,35 +54,35 @@ namespace Puffin.Editor.Hub.Data
         public bool IsGitHubRepo => !url.StartsWith("http");
 
         /// <summary>
-        /// 获取模块清单的下载 URL（从模块版本 Release 的 Asset）
+        /// 获取模块清单的下载 URL
         /// </summary>
         public string GetManifestUrl(string moduleId, string version)
         {
             if (url.StartsWith("http"))
                 return $"{url.TrimEnd('/')}/modules/{moduleId}/{version}/manifest.json";
-            // GitHub Releases: tag 格式为 {moduleId}-{version}
-            return $"https://github.com/{url}/releases/download/{moduleId}-{version}/manifest.json";
+            // GitHub raw
+            return $"https://raw.githubusercontent.com/{url}/{branch}/modules/{moduleId}/{version}/manifest.json";
         }
 
         /// <summary>
-        /// 获取模块下载 URL（从模块版本 Release 的 Asset）
+        /// 获取模块下载 URL
         /// </summary>
         public string GetDownloadUrl(string moduleId, string version, string fileName)
         {
             if (url.StartsWith("http"))
-                return $"{url.TrimEnd('/')}/modules/{moduleId}/{version}/{fileName}";
-            // GitHub Releases: tag 格式为 {moduleId}-{version}
-            return $"https://github.com/{url}/releases/download/{moduleId}-{version}/{fileName}";
+                return $"{url.TrimEnd('/')}/modules/{moduleId}/{fileName}";
+            // GitHub raw
+            return $"https://raw.githubusercontent.com/{url}/{branch}/modules/{moduleId}/{fileName}";
         }
 
         /// <summary>
-        /// 获取 Release Asset 的 GitHub API URL（用于绕过 CDN 缓存下载）
+        /// 获取 Contents API URL（用于绕过 CDN 缓存）
         /// </summary>
-        public string GetReleaseApiUrl(string tag)
+        public string GetContentsApiUrl(string path)
         {
             if (url.StartsWith("http"))
                 return null;
-            return $"https://api.github.com/repos/{url}/releases/tags/{tag}";
+            return $"https://api.github.com/repos/{url}/contents/{path}?ref={branch}";
         }
     }
 }

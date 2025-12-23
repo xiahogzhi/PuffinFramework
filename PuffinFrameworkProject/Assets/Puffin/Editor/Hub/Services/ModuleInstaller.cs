@@ -368,7 +368,7 @@ namespace Puffin.Editor.Hub.Services
                 File.Delete(cachePath);
             }
 
-            // 下载（Releases API 的下载 URL 是直接的二进制链接）
+            // 下载
             var downloader = new Downloader();
             downloader.OnProgress += (p, dl, total, speed) =>
             {

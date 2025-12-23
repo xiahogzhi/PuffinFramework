@@ -373,7 +373,7 @@ namespace Puffin.Editor.Hub.Services
         }
 
         /// <summary>
-        /// 通过 GitHub Releases API 获取 registry.json 内容（绕过 CDN 缓存）
+        /// 通过 GitHub Contents API 获取文件内容（绕过 CDN 缓存）
         /// </summary>
         private async UniTask<string> FetchGitHubApiContentAsync(string apiUrl, string authToken = null)
         {
@@ -395,27 +395,15 @@ namespace Puffin.Editor.Hub.Services
                 return null;
             }
 
-            // Releases API 返回 Release 信息，需要从 assets 中找到 registry.json 的下载 URL
+            // Contents API 返回 JSON，包含 base64 编码的 content
             var response = request.downloadHandler.text;
             var json = JObject.Parse(response);
-            var assets = json["assets"] as JArray;
-            if (assets == null) return null;
-
-            foreach (var asset in assets)
+            var contentBase64 = json["content"]?.Value<string>();
+            if (!string.IsNullOrEmpty(contentBase64))
             {
-                if (asset["name"]?.Value<string>() == "registry.json")
-                {
-                    var downloadUrl = asset["browser_download_url"]?.Value<string>();
-                    if (!string.IsNullOrEmpty(downloadUrl))
-                    {
-                        // 下载 registry.json 内容
-                        using var downloadRequest = UnityWebRequest.Get(downloadUrl);
-                        await downloadRequest.SendWebRequest();
-                        if (downloadRequest.result == UnityWebRequest.Result.Success)
-                            return downloadRequest.downloadHandler.text;
-                    }
-                    break;
-                }
+                // 移除换行符并解码
+                var cleanBase64 = contentBase64.Replace("\n", "").Replace("\r", "");
+                return System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(cleanBase64));
             }
 
             return null;
