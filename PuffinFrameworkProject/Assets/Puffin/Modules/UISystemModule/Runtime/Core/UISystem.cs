@@ -13,6 +13,7 @@ using UnityEngine.UI;
 using XFrameworks.Runtime.Core;
 using XFrameworks.Systems.UISystems.Interface;
 using XFrameworks.Utils;
+using UnityEngine.Rendering.Universal;
 using Debug = UnityEngine.Debug;
 using Object = UnityEngine.Object;
 
@@ -25,6 +26,26 @@ namespace XFrameworks.Systems.UISystems.Core
         /// Resources下的目录路径
         /// </summary>
         public const string DefaultFolder = "UI";
+
+        /// <summary>
+        /// UI根节点
+        /// </summary>
+        private Transform _uiRoot;
+
+        /// <summary>
+        /// UI摄像机
+        /// </summary>
+        private Camera _uiCamera;
+
+        /// <summary>
+        /// UI根节点
+        /// </summary>
+        public Transform UIRoot => _uiRoot;
+
+        /// <summary>
+        /// UI摄像机
+        /// </summary>
+        public Camera UICamera => _uiCamera;
 
         /// <summary>
         /// 实例化的所有UI
@@ -105,12 +126,13 @@ namespace XFrameworks.Systems.UISystems.Core
 #if UNITY_EDITOR
             if (!PuffinFramework.IsApplicationStarted) return null;
 #endif
+            if (_uiRoot == null) return null;
+
             GameObject go = new GameObject("Layer - " + layer, typeof(Canvas), typeof(GraphicRaycaster));
             Canvas canvas = go.GetComponent<Canvas>();
             go.layer = 5;
             RectTransform trans = (RectTransform) go.transform;
-            //todo
-            // trans.SetParent(LauncherSetting.instance.systemConfig.uiRoot);
+            trans.SetParent(_uiRoot);
             trans.localScale = Vector3.one;
             trans.localPosition = Vector3.zero;
             trans.anchorMax = Vector2.one;
@@ -120,6 +142,7 @@ namespace XFrameworks.Systems.UISystems.Core
 
             canvas.overrideSorting = true;
             canvas.sortingOrder = layer;
+            canvas.worldCamera = _uiCamera;
             _layers.Add(layer, trans);
             return trans;
         }
@@ -204,15 +227,14 @@ namespace XFrameworks.Systems.UISystems.Core
 
         void InitMask()
         {
+            if (_uiRoot == null) return;
+
             GameObject go = new GameObject("Mask", typeof(Image), typeof(Button));
             go.layer = 5;
             RectTransform rt = (RectTransform) go.transform;
-            //todo
-            // rt.SetParent(LauncherSetting.instance.systemConfig.uiRoot);
+            rt.SetParent(_uiRoot);
             rt.anchorMax = Vector2.one;
             rt.anchorMin = Vector2.zero;
-            rt.offsetMax = Vector2.zero;
-            rt.offsetMin = Vector2.zero;
             rt.offsetMax = Vector2.zero;
             rt.offsetMin = Vector2.zero;
             rt.anchoredPosition3D = Vector3.zero;
@@ -221,8 +243,6 @@ namespace XFrameworks.Systems.UISystems.Core
             Button btn = go.GetComponent<Button>();
             btn.onClick.AddListener(OnMaskClick);
             img.color = new Color(0, 0, 0, 0.95f);
-            // img.material = blurMat;
-            // img.material = Resources.Load<Material>("DefaultAssets/Blur Mask");
 
             btn.navigation = new Navigation() {mode = Navigation.Mode.None};
             btn.transition = Selectable.Transition.None;
@@ -234,16 +254,15 @@ namespace XFrameworks.Systems.UISystems.Core
         public void RefreshUI()
         {
 #if UNITY_EDITOR
-
             if (!PuffinFramework.IsApplicationStarted) return;
 #endif
+            if (_uiRoot == null || _mask == null) return;
+
             SortUI();
             bool maskFlag = false;
             bool focusFlag = false;
-            // bool useBlur = false;
 
-            //todo
-            // _mask.SetParent(LauncherSetting.instance.systemConfig.uiRoot);
+            _mask.SetParent(_uiRoot);
             foreach (var ui in _instanceUIs)
             {
                 if (!ui.IsState(Panel.StateEnum.Shown | Panel.StateEnum.Show))
@@ -650,25 +669,46 @@ namespace XFrameworks.Systems.UISystems.Core
 
         UniTask IInitializeAsync.OnInitializeAsync()
         {
-            // for (int i = 0; i < LauncherSetting.instance.systemConfig.uiRoot.childCount; i++)
-            //     Object.Destroy(LauncherSetting.instance.systemConfig.uiRoot.GetChild(i).gameObject);
-            //
-            // // InitBlurMask();
-            // InitMask();
-            // LoadUI();
-            // // LoadPersistenceUI<ConsolePanel>();
-            // // LoadPersistenceUI<Transition>();
-            // // LoadPersistenceUI<BlackCurtainPanel>();
-            //
-            // XFramework.globalDispatcher.Register<InputEventDefines.OnUIKey>((x) =>
-            // {
-            //     if (x.uiKeyData.code == UIKeyCodeEnum.Exit && x.uiKeyData.state == KeyStateEnum.Down)
-            //     {
-            //         if (HasPopUI())
-            //             AutoCloseTopPopUI(true);
-            //     }
-            // });
+            InitFromPrefab();
+            InitMask();
             return UniTask.CompletedTask;
+        }
+
+        /// <summary>
+        /// 从预设初始化 UI 系统
+        /// </summary>
+        private void InitFromPrefab()
+        {
+            var prefab = PuffinFramework.ResourcesLoader.Load<GameObject>("Assets/UI/UIRoot.prefab");
+            if (prefab == null)
+            {
+                Log.Error("UIRoot 预设未找到: Assets/UI/UIRoot.prefab");
+                return;
+            }
+
+            var rootGo = Object.Instantiate(prefab);
+            rootGo.name = "[UIRoot]";
+            Object.DontDestroyOnLoad(rootGo);
+            _uiRoot = rootGo.transform;
+            _uiCamera = rootGo.GetComponentInChildren<Camera>();
+
+            // URP: 将 UI Camera 添加到主摄像机堆叠
+            SetupURPCameraStack();
+        }
+
+        /// <summary>
+        /// 设置 URP 摄像机堆叠
+        /// </summary>
+        private void SetupURPCameraStack()
+        {
+            if (_uiCamera == null) return;
+
+            var mainCamera = Camera.main;
+            if (mainCamera == null) return;
+
+            var mainCameraData = mainCamera.GetUniversalAdditionalCameraData();
+            if (mainCameraData != null && !mainCameraData.cameraStack.Contains(_uiCamera))
+                mainCameraData.cameraStack.Add(_uiCamera);
         }
 
         public void Close<T>(bool useAnimation = true) where T : Panel

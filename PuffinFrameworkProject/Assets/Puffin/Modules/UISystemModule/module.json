@@ -3,7 +3,7 @@
   "displayName": "UI系统",
   "version": "1.0.0",
   "author": "InputName",
-  "description": "UI系统模块，支持层级管理，自动设置Mask，动画播放，Pop类型UI，主类型UI，附加UI",
+  "description": "- UI系统模块，支持层级管理，自动设置Mask，动画播放，Pop类型UI，主类型UI，附加UI\n- 仅支持URP",
   "tags": [],
   "unityVersion": "",
   "puffinVersion": "",
@@ -18,7 +18,7 @@
   "envDependencies": null,
   "references": {
     "moduleReferences": [],
-    "references": "#Sirenix.OdinInspector.Attributes.dll;#DOTween.dll;UniTask.asmdef;UnityEngine.UI.asmdef"
+    "references": "#Sirenix.OdinInspector.Attributes.dll;#DOTween.dll;UniTask.asmdef;UnityEngine.UI.asmdef;Unity.RenderPipelines.Universal.Runtime.asmdef"
   },
   "downloadUrl": "",
   "checksum": "",

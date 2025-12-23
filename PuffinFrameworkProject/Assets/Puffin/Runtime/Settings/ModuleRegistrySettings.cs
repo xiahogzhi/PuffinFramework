@@ -49,9 +49,12 @@ namespace Puffin.Runtime.Settings
             if (_disabledAssemblyPrefixes == null)
                 RebuildCache();
 
-            foreach (var prefix in _disabledAssemblyPrefixes)
+            foreach (var moduleId in _disabledAssemblyPrefixes)
             {
-                if (assemblyName.Contains(prefix))
+                // 使用精确匹配：程序集名以 moduleId 开头或包含 .moduleId.
+                if (assemblyName.StartsWith(moduleId, StringComparison.Ordinal) ||
+                    assemblyName.Contains("." + moduleId + ".") ||
+                    assemblyName.EndsWith("." + moduleId, StringComparison.Ordinal))
                     return true;
             }
             return false;

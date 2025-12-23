@@ -225,37 +225,51 @@ namespace Puffin.Editor.Hub.Services
             return updates;
         }
 
-        private int[] ParseVersion(string version)
+        private (int[] numbers, string prerelease) ParseVersion(string version)
         {
-            var parts = Regex.Replace(version, @"[^\d.]", "").Split('.');
+            // 分离预发布标识 (如 1.0.0-alpha.1)
+            var hyphenIndex = version.IndexOf('-');
+            var mainPart = hyphenIndex >= 0 ? version.Substring(0, hyphenIndex) : version;
+            var prerelease = hyphenIndex >= 0 ? version.Substring(hyphenIndex + 1) : null;
+
+            var parts = Regex.Replace(mainPart, @"[^\d.]", "").Split('.');
             var result = new int[3];
             for (var i = 0; i < Math.Min(parts.Length, 3); i++)
                 int.TryParse(parts[i], out result[i]);
-            return result;
+            return (result, prerelease);
         }
 
-        private int CompareVersions(int[] v1, int[] v2)
+        private int CompareVersions((int[] numbers, string prerelease) v1, (int[] numbers, string prerelease) v2)
         {
+            // 比较主版本号
             for (var i = 0; i < 3; i++)
             {
-                if (v1[i] != v2[i])
-                    return v1[i].CompareTo(v2[i]);
+                if (v1.numbers[i] != v2.numbers[i])
+                    return v1.numbers[i].CompareTo(v2.numbers[i]);
             }
+            // 主版本相同时，无预发布标识 > 有预发布标识
+            if (v1.prerelease == null && v2.prerelease != null) return 1;
+            if (v1.prerelease != null && v2.prerelease == null) return -1;
+            if (v1.prerelease != null && v2.prerelease != null)
+                return string.Compare(v1.prerelease, v2.prerelease, StringComparison.Ordinal);
             return 0;
         }
 
         private List<ResolvedModule> TopologicalSort(List<ResolvedModule> modules)
         {
-            // 简单实现：按依赖数量排序
             var moduleDict = modules.ToDictionary(m => m.ModuleId);
             var result = new List<ResolvedModule>();
             var visited = new HashSet<string>();
+            var visiting = new HashSet<string>(); // 用于环检测
 
             void Visit(ResolvedModule module)
             {
                 if (visited.Contains(module.ModuleId))
                     return;
-                visited.Add(module.ModuleId);
+                if (visiting.Contains(module.ModuleId))
+                    throw new Exception($"模块循环依赖: {module.ModuleId}");
+
+                visiting.Add(module.ModuleId);
 
                 var deps = module.Manifest?.moduleDependencies;
                 if (deps != null)
@@ -267,6 +281,8 @@ namespace Puffin.Editor.Hub.Services
                     }
                 }
 
+                visiting.Remove(module.ModuleId);
+                visited.Add(module.ModuleId);
                 result.Add(module);
             }
 

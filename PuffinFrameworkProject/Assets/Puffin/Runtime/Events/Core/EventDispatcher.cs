@@ -577,6 +577,10 @@ namespace Puffin.Runtime.Events.Core
 
         private object GetOrCreateDefaultEvent(Type eventType)
         {
+            // struct 类型每次创建新实例，避免状态污染
+            if (eventType.IsValueType)
+                return Activator.CreateInstance(eventType);
+
             if (_defaultEventCache.TryGetValue(eventType, out var evt))
                 return evt;
             evt = Activator.CreateInstance(eventType);

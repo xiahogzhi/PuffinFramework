@@ -1,0 +1,21 @@
+{
+    "moduleId": "InputSystemModule",
+    "displayName": "输入模块",
+    "version": "1.0.0",
+    "author": "InputName",
+    "description": "封装一层输入系统，用来管理不同玩家，不同布局的通用接口",
+    "tags": [],
+    "unityVersion": "",
+    "puffinVersion": "",
+    "moduleDependencies": [],
+    "envDependencies": [],
+    "references": {
+        "moduleReferences": [],
+        "references": ""
+    },
+    "downloadUrl": "",
+    "checksum": "",
+    "size": 0,
+    "releaseNotes": "",
+    "publishedAt": ""
+}

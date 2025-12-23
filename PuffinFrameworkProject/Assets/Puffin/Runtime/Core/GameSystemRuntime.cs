@@ -802,10 +802,18 @@ namespace Puffin.Runtime.Core
             visiting.Add(type);
 
             var deps = type.GetCustomAttributes<DependsOnAttribute>();
+            var settings = SystemRegistrySettings.Instance;
             foreach (var dep in deps)
             {
-                // 找到实现该接口的类型
-                var depType = typeSet.FirstOrDefault(t =>
+                // 找到实现该接口的类型，优先使用 SystemRegistrySettings 中指定的实现
+                Type depType = null;
+                if (dep.DependencyType.IsInterface)
+                {
+                    var selectedImpl = settings?.GetSelectedImplementation(dep.DependencyType.FullName);
+                    if (!string.IsNullOrEmpty(selectedImpl))
+                        depType = typeSet.FirstOrDefault(t => t.FullName == selectedImpl);
+                }
+                depType ??= typeSet.FirstOrDefault(t =>
                     dep.DependencyType.IsAssignableFrom(t) || t == dep.DependencyType);
 
                 if (depType != null)

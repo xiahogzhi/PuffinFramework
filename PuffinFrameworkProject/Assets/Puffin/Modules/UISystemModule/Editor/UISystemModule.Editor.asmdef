@@ -8,7 +8,8 @@
         "GameDevKit.Runtime",
         "GameDevKit.Editor",
         "UniTask",
-        "UnityEngine.UI"
+        "UnityEngine.UI",
+        "Unity.RenderPipelines.Universal.Runtime"
     ],
     "includePlatforms": [
         "Editor"
