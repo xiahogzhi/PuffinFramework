@@ -11,7 +11,7 @@ namespace Puffin.Modules.TimerModule.Runtime
     /// </summary>
     [AutoRegister]
     [SystemPriority(-100)]
-    public class TimerSystem : IGameSystem, IUpdate
+    public class TimerSystem : ISystem, ISystemUpdate
     {
 
         /// <summary>
@@ -19,9 +19,7 @@ namespace Puffin.Modules.TimerModule.Runtime
         /// </summary>
         public void OnUpdate(float deltaTime)
         {
-            global::Puffin.Modules.TimerModule.Runtime.Timer.UpdateAll();
+            Timer.UpdateAll();
         }
-
-       
     }
 } 

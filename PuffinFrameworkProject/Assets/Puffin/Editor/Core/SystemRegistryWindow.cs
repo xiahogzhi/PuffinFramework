@@ -387,7 +387,7 @@ namespace Puffin.Editor.Core
                 try
                 {
                     var types = assembly.GetTypes()
-                        .Where(t => typeof(IGameSystem).IsAssignableFrom(t) &&
+                        .Where(t => typeof(ISystem).IsAssignableFrom(t) &&
                                     !t.IsAbstract && !t.IsInterface &&
                                     t.GetCustomAttribute<AutoRegisterAttribute>() != null);
 
@@ -448,7 +448,7 @@ namespace Puffin.Editor.Core
             {
                 foreach (var iface in system.Type.GetInterfaces())
                 {
-                    if (iface != typeof(IGameSystem) && typeof(IGameSystem).IsAssignableFrom(iface))
+                    if (iface != typeof(ISystem) && typeof(ISystem).IsAssignableFrom(iface))
                     {
                         if (!interfaceToTypes.TryGetValue(iface, out var list))
                         {

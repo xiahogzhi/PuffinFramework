@@ -22,7 +22,7 @@ namespace XFrameworks.Systems.UISystems.Core
 {
     [SystemAlias("UI系统")]
     [DependsOn(typeof(IResourcesSystem))]
-    public class UISystem : IGameSystem, ISystemInitialize
+    public class UISystem : ISystem, ISystemInitialize
     {
         /// <summary>
         /// Resources下的目录路径

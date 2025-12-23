@@ -114,7 +114,7 @@ namespace Puffin.Runtime.Core
         private bool IsValidSystemType(Type type)
         {
             // 基本条件
-            if (!typeof(IGameSystem).IsAssignableFrom(type))
+            if (!typeof(ISystem).IsAssignableFrom(type))
                 return false;
             if (type.IsAbstract || type.IsInterface)
                 return false;

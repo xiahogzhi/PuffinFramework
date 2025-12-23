@@ -263,7 +263,7 @@ namespace Puffin.Boot.Runtime
 
         private static bool IsEditorSupportSystem(Type type, ScannerConfig config)
         {
-            if (!typeof(IGameSystem).IsAssignableFrom(type))
+            if (!typeof(ISystem).IsAssignableFrom(type))
                 return false;
             if (type.IsAbstract || type.IsInterface)
                 return false;

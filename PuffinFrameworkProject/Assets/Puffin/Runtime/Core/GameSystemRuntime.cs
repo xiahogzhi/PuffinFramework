@@ -39,13 +39,13 @@ namespace Puffin.Runtime.Core
         private readonly IPuffinLogger _logger;
 
         // 所有已注册的系统实例
-        private readonly List<IGameSystem> _systems = new();
+        private readonly List<ISystem> _systems = new();
 
         // 类型 -> 实例 (支持接口和具体类两种方式访问)
-        private readonly Dictionary<Type, IGameSystem> _typeToInstance = new();
+        private readonly Dictionary<Type, ISystem> _typeToInstance = new();
 
         // 已初始化的系统
-        private readonly HashSet<IGameSystem> _initializedSystems = new();
+        private readonly HashSet<ISystem> _initializedSystems = new();
 
         // 生命周期事件列表
         private readonly List<ISystemUpdate> _updateList = new();
@@ -58,17 +58,17 @@ namespace Puffin.Runtime.Core
         private readonly List<ISystemInitialize> _initAsyncList = new();
 
         // 性能统计
-        private readonly Dictionary<IGameSystem, PerformanceData> _performanceData = new();
+        private readonly Dictionary<ISystem, PerformanceData> _performanceData = new();
         private readonly Stopwatch _stopwatch = new();
 
         // 条件符号集合
         private readonly HashSet<string> _definedSymbols = new();
 
         // 系统别名映射
-        private readonly Dictionary<string, IGameSystem> _aliasToInstance = new();
+        private readonly Dictionary<string, ISystem> _aliasToInstance = new();
 
         // Update 间隔控制
-        private readonly Dictionary<IGameSystem, UpdateIntervalData> _updateIntervals = new();
+        private readonly Dictionary<ISystem, UpdateIntervalData> _updateIntervals = new();
         private int _frameCount;
 
         // 系统元数据缓存（避免重复反射）
@@ -83,9 +83,9 @@ namespace Puffin.Runtime.Core
         public bool IsPaused { get; private set; }
 
         // 系统事件
-        public event Action<IGameSystem> OnSystemRegistered;
-        public event Action<IGameSystem> OnSystemUnregistered;
-        public event Action<IGameSystem, bool> OnSystemEnabledChanged;
+        public event Action<ISystem> OnSystemRegistered;
+        public event Action<ISystem> OnSystemUnregistered;
+        public event Action<ISystem, bool> OnSystemEnabledChanged;
 
         /// <summary>
         /// 是否启用性能统计
@@ -132,7 +132,7 @@ namespace Puffin.Runtime.Core
         /// <summary>
         /// 获取系统名称（从缓存或 SystemAliasAttribute）
         /// </summary>
-        public string GetSystemName(IGameSystem system) => GetSystemName(system.GetType());
+        public string GetSystemName(ISystem system) => GetSystemName(system.GetType());
 
         public string GetSystemName(Type type)
         {
@@ -143,7 +143,7 @@ namespace Puffin.Runtime.Core
         /// <summary>
         /// 获取系统优先级（从缓存或 SystemPriorityAttribute）
         /// </summary>
-        public int GetSystemPriority(IGameSystem system) => GetSystemPriority(system.GetType());
+        public int GetSystemPriority(ISystem system) => GetSystemPriority(system.GetType());
 
         public int GetSystemPriority(Type type)
         {
@@ -156,7 +156,7 @@ namespace Puffin.Runtime.Core
         /// <summary>
         /// 获取系统 - 支持接口或具体类
         /// </summary>
-        public T GetSystem<T>() where T : class, IGameSystem
+        public T GetSystem<T>() where T : class, ISystem
         {
             return _typeToInstance.TryGetValue(typeof(T), out var system) ? system as T : null;
         }
@@ -164,7 +164,7 @@ namespace Puffin.Runtime.Core
         /// <summary>
         /// 检查系统是否存在
         /// </summary>
-        public bool HasSystem<T>() where T : class, IGameSystem
+        public bool HasSystem<T>() where T : class, ISystem
         {
             return _typeToInstance.ContainsKey(typeof(T));
         }
@@ -172,12 +172,12 @@ namespace Puffin.Runtime.Core
         /// <summary>
         /// 获取所有已注册的系统（调试用）
         /// </summary>
-        public IReadOnlyList<IGameSystem> GetAllSystems() => _systems;
+        public IReadOnlyList<ISystem> GetAllSystems() => _systems;
 
         /// <summary>
         /// 通过别名获取系统
         /// </summary>
-        public IGameSystem GetSystemByAlias(string alias)
+        public ISystem GetSystemByAlias(string alias)
         {
             return _aliasToInstance.TryGetValue(alias, out var system) ? system : null;
         }
@@ -185,7 +185,7 @@ namespace Puffin.Runtime.Core
         /// <summary>
         /// 通过别名获取系统（泛型版本）
         /// </summary>
-        public T GetSystemByAlias<T>(string alias) where T : class, IGameSystem
+        public T GetSystemByAlias<T>(string alias) where T : class, ISystem
         {
             return GetSystemByAlias(alias) as T;
         }
@@ -193,7 +193,7 @@ namespace Puffin.Runtime.Core
         /// <summary>
         /// 获取系统状态信息
         /// </summary>
-        public SystemStatus GetSystemStatus<T>() where T : class, IGameSystem
+        public SystemStatus GetSystemStatus<T>() where T : class, ISystem
         {
             var system = GetSystem<T>();
             if (system == null) return null;
@@ -323,7 +323,7 @@ namespace Puffin.Runtime.Core
         /// <summary>
         /// 动态注册单个系统（运行时）
         /// </summary>
-        public async UniTask RegisterSystemAsync<T>() where T : class, IGameSystem, new()
+        public async UniTask RegisterSystemAsync<T>() where T : class, ISystem, new()
         {
             var type = typeof(T);
 
@@ -368,7 +368,7 @@ namespace Puffin.Runtime.Core
         /// <summary>
         /// 动态注册单个系统（同步版本）
         /// </summary>
-        public void RegisterSystem<T>() where T : class, IGameSystem, new()
+        public void RegisterSystem<T>() where T : class, ISystem, new()
         {
             RegisterSystemAsync<T>().Forget();
         }
@@ -423,7 +423,7 @@ namespace Puffin.Runtime.Core
             if (_typeToInstance.ContainsKey(type))
                 return;
 
-            var system = Activator.CreateInstance(type) as IGameSystem
+            var system = Activator.CreateInstance(type) as ISystem
                          ?? throw new Exception($"创建系统实例失败: {type}");
 
             _systems.Add(system);
@@ -436,7 +436,7 @@ namespace Puffin.Runtime.Core
             var settings = SystemRegistrySettings.Instance;
             foreach (var iface in type.GetInterfaces())
             {
-                if (iface != typeof(IGameSystem) && typeof(IGameSystem).IsAssignableFrom(iface))
+                if (iface != typeof(ISystem) && typeof(ISystem).IsAssignableFrom(iface))
                 {
                     if (_typeToInstance.ContainsKey(iface))
                     {
@@ -482,7 +482,7 @@ namespace Puffin.Runtime.Core
         /// <summary>
         /// 注销系统
         /// </summary>
-        public void UnRegister<T>() where T : class, IGameSystem
+        public void UnRegister<T>() where T : class, ISystem
         {
             UnRegister(typeof(T));
         }
@@ -543,7 +543,7 @@ namespace Puffin.Runtime.Core
         /// <summary>
         /// 启用/禁用指定系统
         /// </summary>
-        public void SetSystemEnabled<T>(bool enabled) where T : class, IGameSystem
+        public void SetSystemEnabled<T>(bool enabled) where T : class, ISystem
         {
             var system = GetSystem<T>();
             SetSystemEnabledInternal(system, enabled);
@@ -558,7 +558,7 @@ namespace Puffin.Runtime.Core
                 SetSystemEnabledInternal(system, enabled);
         }
 
-        private void SetSystemEnabledInternal(IGameSystem system, bool enabled)
+        private void SetSystemEnabledInternal(ISystem system, bool enabled)
         {
             if (system is ISystemEnabled sys)
             {
@@ -587,7 +587,7 @@ namespace Puffin.Runtime.Core
                 if (sys is ISystemEnabled {Enabled: false}) continue;
 
                 // 检查 Update 间隔
-                var gameSystem = (IGameSystem) sys;
+                var gameSystem = (ISystem) sys;
                 if (_updateIntervals.TryGetValue(gameSystem, out var intervalData))
                 {
                     if (!intervalData.ShouldUpdate(_frameCount))
@@ -704,7 +704,7 @@ namespace Puffin.Runtime.Core
                 try
                 {
                     await sys.OnInitializeAsync();
-                    _initializedSystems.Add((IGameSystem) sys);
+                    _initializedSystems.Add((ISystem) sys);
                 }
                 catch (Exception e)
                 {
@@ -720,7 +720,7 @@ namespace Puffin.Runtime.Core
         /// <summary>
         /// 尝试将系统添加到生命周期事件列表
         /// </summary>
-        private void TryAddEvent<T>(IGameSystem system, List<T> list) where T : class
+        private void TryAddEvent<T>(ISystem system, List<T> list) where T : class
         {
             if (system is T evt)
                 list.Add(evt);
@@ -729,7 +729,7 @@ namespace Puffin.Runtime.Core
         /// <summary>
         /// 尝试从生命周期事件列表移除系统
         /// </summary>
-        private void TryRemoveEvent<T>(IGameSystem system, List<T> list) where T : class
+        private void TryRemoveEvent<T>(ISystem system, List<T> list) where T : class
         {
             if (system is T evt)
                 list.Remove(evt);
@@ -740,17 +740,17 @@ namespace Puffin.Runtime.Core
         /// </summary>
         private void SortByPriority()
         {
-            int Compare(IGameSystem a, IGameSystem b) => GetSystemPriority(a).CompareTo(GetSystemPriority(b));
+            int Compare(ISystem a, ISystem b) => GetSystemPriority(a).CompareTo(GetSystemPriority(b));
 
             _systems.Sort(Compare);
-            _updateList.Sort((a, b) => Compare((IGameSystem) a, (IGameSystem) b));
-            _fixedUpdateList.Sort((a, b) => Compare((IGameSystem) a, (IGameSystem) b));
-            _lateUpdateList.Sort((a, b) => Compare((IGameSystem) a, (IGameSystem) b));
-            _quitList.Sort((a, b) => Compare((IGameSystem) a, (IGameSystem) b));
-            _focusList.Sort((a, b) => Compare((IGameSystem) a, (IGameSystem) b));
-            _pauseList.Sort((a, b) => Compare((IGameSystem) a, (IGameSystem) b));
-            _registerList.Sort((a, b) => Compare((IGameSystem) a, (IGameSystem) b));
-            _initAsyncList.Sort((a, b) => Compare((IGameSystem) a, (IGameSystem) b));
+            _updateList.Sort((a, b) => Compare((ISystem) a, (ISystem) b));
+            _fixedUpdateList.Sort((a, b) => Compare((ISystem) a, (ISystem) b));
+            _lateUpdateList.Sort((a, b) => Compare((ISystem) a, (ISystem) b));
+            _quitList.Sort((a, b) => Compare((ISystem) a, (ISystem) b));
+            _focusList.Sort((a, b) => Compare((ISystem) a, (ISystem) b));
+            _pauseList.Sort((a, b) => Compare((ISystem) a, (ISystem) b));
+            _registerList.Sort((a, b) => Compare((ISystem) a, (ISystem) b));
+            _initAsyncList.Sort((a, b) => Compare((ISystem) a, (ISystem) b));
         }
 
         #endregion
@@ -812,7 +812,7 @@ namespace Puffin.Runtime.Core
             {
                 foreach (var iface in type.GetInterfaces())
                 {
-                    if (iface != typeof(IGameSystem) && typeof(IGameSystem).IsAssignableFrom(iface))
+                    if (iface != typeof(ISystem) && typeof(ISystem).IsAssignableFrom(iface))
                     {
                         if (!interfaceToDefaults.ContainsKey(iface))
                             interfaceToDefaults[iface] = new List<Type>();
@@ -829,7 +829,7 @@ namespace Puffin.Runtime.Core
                 // 检查该类型实现的所有接口
                 foreach (var iface in type.GetInterfaces())
                 {
-                    if (iface != typeof(IGameSystem) && typeof(IGameSystem).IsAssignableFrom(iface))
+                    if (iface != typeof(ISystem) && typeof(ISystem).IsAssignableFrom(iface))
                     {
                         // 如果接口还没有被注册（没有非默认实现）
                         if (!_typeToInstance.ContainsKey(iface))
@@ -971,7 +971,7 @@ namespace Puffin.Runtime.Core
         /// <summary>
         /// 为单个系统执行依赖注入
         /// </summary>
-        private void InjectDependencies(IGameSystem system)
+        private void InjectDependencies(ISystem system)
         {
             InjectTo(system);
         }
@@ -1036,7 +1036,7 @@ namespace Puffin.Runtime.Core
             }
         }
 
-        private void RecordPerformance(IGameSystem system, double ms)
+        private void RecordPerformance(ISystem system, double ms)
         {
             if (_performanceData.TryGetValue(system, out var data))
                 data.Record(ms);

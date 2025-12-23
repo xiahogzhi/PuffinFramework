@@ -1,11 +1,10 @@
 using System;
 using System.Collections.Generic;
 using Puffin.Runtime.Interfaces;
-using Unity.Android.Gradle.Manifest;
 
 namespace Puffin.Modules.ConfigSystemInterface.Runtime
 {
-    public interface IConfigSystem : IGameSystem
+    public interface IConfigSystem : ISystem
     {
         /// <summary>
         /// 是否加载

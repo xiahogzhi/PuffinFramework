@@ -213,7 +213,7 @@ namespace Puffin.Runtime.Core
         /// <summary>
         /// 获取系统
         /// </summary>
-        public static T GetSystem<T>() where T : class, IGameSystem
+        public static T GetSystem<T>() where T : class, ISystem
         {
             if (EffectiveRuntime == null)
                 throw new Exception("PuffinFramework 未初始化");
@@ -223,7 +223,7 @@ namespace Puffin.Runtime.Core
         /// <summary>
         /// 检查系统是否存在
         /// </summary>
-        public static bool HasSystem<T>() where T : class, IGameSystem
+        public static bool HasSystem<T>() where T : class, ISystem
         {
             return EffectiveRuntime?.HasSystem<T>() ?? false;
         }
