@@ -1,0 +1,10 @@
+{
+    "name": "Xiahogzhi.Test1.Editor",
+    "references": [
+      "Xiahogzhi.Test1"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": []
+}

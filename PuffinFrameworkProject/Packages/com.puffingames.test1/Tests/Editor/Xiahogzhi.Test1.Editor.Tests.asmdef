@@ -1,0 +1,14 @@
+{
+    "name": "Xiahogzhi.Test1.Editor.Tests",
+    "references": [
+        "Xiahogzhi.Test1.Editor",
+        "Xiahogzhi.Test1"
+    ],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": []
+}

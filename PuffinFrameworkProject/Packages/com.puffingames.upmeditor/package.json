@@ -1,0 +1,16 @@
+{
+  "name": "com.puffingames.upmeditor",
+  "displayName": "UPM Editor",
+  "version": "1.0.0",
+  "unity": "6000.3",
+  "description": "Unity Package Manager \u7f16\u8f91\u5668\u5de5\u5177\uff0c\u7528\u4e8e\u521b\u5efa\u3001\u7f16\u8f91\u548c\u7ba1\u7406 UPM \u5305\u3002\u529f\u80fd\u5305\u62ec Assets \u548c Packages \u76ee\u5f55\u4e4b\u95f4\u7684\u8f6c\u6362\u3001\u5305\u521b\u5efa\u5411\u5bfc\u548c package.json \u7f16\u8f91\u5668\u3002",
+  "keywords": [
+    "upm",
+    "package",
+    "editor",
+    "tools"
+  ],
+  "author": {
+    "name": "InputName"
+  }
+}

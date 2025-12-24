@@ -30,9 +30,9 @@ MonoBehaviour:
     m_Compliance:
       m_Status: 0
       m_Violations: []
-  - m_Id: "scoped:project:\u81EA\u5B9A\u4E49"
-    m_Name: "\u81EA\u5B9A\u4E49"
-    m_Url: http://192.168.31.165:4873
+  - m_Id: scoped:project:Puffin Games
+    m_Name: Puffin Games
+    m_Url: http://www.inputname.com:4873
     m_Scopes:
     - com.puffingames
     m_IsDefault: 0
@@ -41,11 +41,22 @@ MonoBehaviour:
     m_Compliance:
       m_Status: 0
       m_Violations: []
-  m_UserSelectedRegistryName: "\u81EA\u5B9A\u4E49"
+  - m_Id: scoped:project:OpenUPM
+    m_Name: OpenUPM
+    m_Url: https://package.openupm.com
+    m_Scopes:
+    - com.littlebigfun.addressable-importer
+    m_IsDefault: 0
+    m_Capabilities: 0
+    m_ConfigSource: 4
+    m_Compliance:
+      m_Status: 0
+      m_Violations: []
+  m_UserSelectedRegistryName: OpenUPM
   m_UserAddingNewScopedRegistry: 0
   m_RegistryInfoDraft:
     m_Modified: 0
     m_ErrorMessage: 
-    m_UserModificationsInstanceId: -894
-    m_OriginalInstanceId: -896
+    m_UserModificationsInstanceId: -898
+    m_OriginalInstanceId: -900
   m_LoadAssets: 0

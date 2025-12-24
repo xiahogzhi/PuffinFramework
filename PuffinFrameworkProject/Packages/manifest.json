@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "com.littlebigfun.addressable-importer": "0.17.0",
     "com.puffingames.test1": "0.1.0",
     "com.unity.ide.rider": "3.0.38",
     "com.unity.inputsystem": "1.16.0",
@@ -46,10 +47,17 @@
   },
   "scopedRegistries": [
     {
-      "name": "自定义",
-      "url": "http://192.168.31.165:4873",
+      "name": "Puffin Games",
+      "url": "http://www.inputname.com:4873",
       "scopes": [
         "com.puffingames"
+      ]
+    },
+    {
+      "name": "OpenUPM",
+      "url": "https://package.openupm.com",
+      "scopes": [
+        "com.littlebigfun.addressable-importer"
       ]
     }
   ]
